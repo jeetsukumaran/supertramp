@@ -47,8 +47,6 @@ def weighted_choice(seq, weights, rng=None):
     given by the list `weights` (which must be at least as long as the
     length of `seq` - 1).
     """
-    if rng is None:
-        rng = GLOBAL_RNG
     if weights is None:
         weights = [1.0/len(seq) for count in range(len(seq))]
     else:
@@ -74,9 +72,7 @@ def weighted_index_choice(weights, rng=None):
     returns a uniformly distributed value and larger chunks of the total
     weight will be skipped in the beginning.
     """
-    if rng is None:
-        rng = GLOBAL_RNG
-    rnd = rng.random() * sum(weights)
+    rnd = rng.uniform(0, 1) * sum(weights)
     for i, w in enumerate(weights):
         rnd -= w
         if rnd < 0:
@@ -283,16 +279,10 @@ class Habitat(object):
         Constitutes next generation.
         """
         lineages, probs = self._get_lineage_selection_probabilities()
-
-        print("-- {} --".format(self.label))
-        print("     lineages: {}".format(lineages))
-        print("probabilities: {}".format(probs))
-
+        if not lineages:
+            return
         self.populations.clear()
         pop_sizes = numpy.random.multinomial(self.carrying_capacity, probs)
-
-        print("  populations: {}".format(pop_sizes))
-
         assert len(lineages) == len(pop_sizes)
         for lineage, pop_size in zip(lineages, pop_sizes):
             self.populations[lineage] = pop_size
@@ -303,7 +293,9 @@ class Habitat(object):
         """
         if not self._dispersal_dest_list:
             self.compile_dispersal_rates()
-        if self.rng.random() <= self._aggregate_rate_of_dispersal:
+        if not self.populations.keys():
+            return
+        if self.rng.uniform(0, 1) <= self._aggregate_rate_of_dispersal:
             dest = weighted_choice(self._dispersal_dest_list, self._dispersal_rate_list, rng=self.rng)
             lineage = weighted_choice(self.populations.keys(), self.populations.values(), rng=self.rng)
             dest.migrants.append(lineage)
@@ -446,7 +438,8 @@ class System(object):
         else:
             self.random_seed = random_seed
         self.logger.info("Initializing with random seed {}".format(self.random_seed))
-        self.rng = random.Random(self.random_seed)
+        # self.rng = random.Random(self.random_seed)
+        self.rng = numpy.random.RandomState(seed=[self.random_seed])
         self.habitats = []
         self.seed_lineage = Lineage()
         self.log_frequency = 1
