@@ -282,10 +282,16 @@ class Habitat(object):
         if not lineages:
             return
         self.populations.clear()
-        pop_sizes = numpy.random.multinomial(self.carrying_capacity, probs)
+        try:
+            pop_sizes = numpy.random.multinomial(self.carrying_capacity, probs)
+        except ValueError:
+            print("::: {}".format(lineages))
+            print("::: {}".format(probs))
+            raise
         assert len(lineages) == len(pop_sizes)
         for lineage, pop_size in zip(lineages, pop_sizes):
-            self.populations[lineage] = pop_size
+            if pop_size > 0:
+                self.populations[lineage] = pop_size
 
     def run_dispersals(self):
         """
@@ -297,7 +303,7 @@ class Habitat(object):
             return
         if self.rng.uniform(0, 1) <= self._aggregate_rate_of_dispersal:
             dest = weighted_choice(self._dispersal_dest_list, self._dispersal_rate_list, rng=self.rng)
-            lineage = weighted_choice(self.populations.keys(), self.populations.values(), rng=self.rng)
+            lineage = weighted_choice(list(self.populations.keys()), list(self.populations.values()), rng=self.rng)
             dest.migrants.append(lineage)
 
     def clean_up(self):
@@ -403,7 +409,7 @@ class Habitat(object):
                 fitnesses.append(fitness)
                 total_fitness += fitness
         for idx, f in enumerate(fitnesses):
-            fitnesses[idx] = fitnesses[idx]/f
+            fitnesses[idx] = fitnesses[idx]/total_fitness
         return lineages, fitnesses
 
 class Island(object):
@@ -422,28 +428,98 @@ class Island(object):
 
 class Lineage(object):
 
-    def __init__(self):
-        self.age = 0.0
-        self.descendents = []
+    counter = 0
+
+    def __init__(self, parent=None):
+        Lineage.counter += 1
+        self.index = Lineage.counter
+        self.age = 0
+        self.parent = parent
+        self.child_nodes = []
+
+    def add_age_to_tips(self, ngens=1):
+        """
+        Grows tree by adding ``ngens`` time unit(s) to all tips.
+        """
+        if self.parent is None:
+            self.age += 1
+        else:
+            for nd in self.leaf_iter():
+                nd.age += 1
+
+    def leaf_iter(self, filter_fn=None):
+        """
+        Returns an iterator over the leaf_nodes that are descendants of self
+        (with leaves returned in same order as a post-order traversal of the
+        tree).
+        """
+        if filter_fn:
+            ff = lambda x: x.parent is None and filter_fn(x) or None
+        else:
+            ff = lambda x: x.parent is None and x or None
+        for node in self.postorder_iter(ff):
+            yield node
+
+    def postorder_iter(self, filter_fn=None):
+        """
+        Postorder traversal of the self and its child_nodes.  Returns self
+        and all descendants such that a node's child_nodes (and their
+        child_nodes) are visited before node.  Filtered by filter_fn:
+        node is only returned if no filter_fn is given or if filter_fn
+        returns True.
+        """
+        stack = [(self, False)]
+        while stack:
+            node, state = stack.pop(0)
+            if state:
+                if filter_fn is None or filter_fn(node):
+                    yield node
+            else:
+                stack.insert(0, (node, True))
+                child_nodes = [(n, False) for n in node.child_nodes]
+                child_nodes.extend(stack)
+                stack = child_nodes
+
+    def diversify(self):
+        """
+        Spawns two child lineages with self as parent.
+        Returns tuple consisting of these two lineages.
+        """
+        c1 = Lineage(parent=self)
+        c2 = Lineage(parent=self)
+        self.child_nodes.append(c1)
+        self.child_nodes.append(c2)
+        return (c1, c2)
+
+    @property
+    def label(self):
+        return "s{}".format(self.index)
+
+    def __str__(self):
+        return self.label
 
     def __repr__(self):
-        return str(id(self))
+        return "<Lineage {}>".format(self.label)
 
 class System(object):
 
     def __init__(self, random_seed=None):
         self.logger = RunLogger(name="supertramp")
+
         if random_seed is None:
             self.random_seed = random.randint(0, sys.maxsize)
         else:
             self.random_seed = random_seed
+        self.log_frequency = 1
+        self.current_gen = 0
+
+        self.global_lineage_birth_rate = 0.01
+        self.global_dispersal_rate = 1.0
+
         self.logger.info("Initializing with random seed {}".format(self.random_seed))
-        # self.rng = random.Random(self.random_seed)
         self.rng = numpy.random.RandomState(seed=[self.random_seed])
         self.habitats = []
         self.seed_lineage = Lineage()
-        self.log_frequency = 1
-        self.current_gen = 0
 
     def bootstrap(self):
         self.logger.info("Bootstrapping ...")
@@ -456,16 +532,52 @@ class System(object):
         for h1 in self.habitats:
             for h2 in self.habitats:
                 if h1 is not h2:
-                    h1.set_dispersal_rate(h2, 1)
+                    h1.set_dispersal_rate(h2, self.global_dispersal_rate)
         self.habitats[0].populations[self.seed_lineage] = 1
 
     def run(self, ngens):
         for i in range(ngens):
             self.current_gen += 1
+            self.seed_lineage.add_age_to_tips(1)
             if self.current_gen % self.log_frequency == 0:
                 self.logger.info("Executing life-cycle {}".format(self.current_gen))
+
+            # if self.rng.uniform(0, 1) <= self.global_lineage_birth_rate:
             for h in self.habitats:
                 h.execute_lifecycle()
+
+            #########################################################################
+            ## Pure-birth (habitat-based) diversification process
+            ## (hacked in here for now)
+            lineage_habitats = {}
+            for h in self.habitats:
+                for lineage in h.populations:
+                    if h.populations[lineage] <= 0:
+                        continue
+                    try:
+                        lineage_habitats[lineage].append(h)
+                    except KeyError:
+                        lineage_habitats[lineage] = [h]
+            birth_rate = len(lineage_habitats) * self.global_lineage_birth_rate
+            if self.rng.uniform(0, 1) <= birth_rate:
+                target_lineage = self.rng.choice(list(lineage_habitats.keys()))
+                c1, c2 = target_lineage.diversify()
+                target_habitat = self.rng.choice(lineage_habitats[target_lineage])
+                for h in self.habitats:
+                    if h is target_habitat:
+                        # note that if populations need sync/management, this
+                        # will not do
+                        h.populations[c2] = h.populations[target_lineage]
+                        # print(">>>> {}".format(h.populations[c2]))
+                        del h.populations[target_lineage]
+                    else:
+                        if target_lineage in h.populations:
+                            # note that if populations need sync/management, this
+                            # will not do
+                            h.populations[c1] = h.populations[target_lineage]
+                            # print("---- {}".format(h.populations[c1]))
+                            del h.populations[target_lineage]
+            #########################################################################
 
 def main():
     parser = argparse.ArgumentParser(description="Biogeographical simulator")
