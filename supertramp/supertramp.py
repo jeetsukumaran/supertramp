@@ -31,9 +31,15 @@
 ##
 ##############################################################################
 
+import sys
+import argparse
 import random
+import logging
 import collections
 import numpy
+
+_LOGGING_LEVEL_ENVAR = "SUPERTRAMP_LOGGING_LEVEL"
+_LOGGING_FORMAT_ENVAR = "SUPERTRAMP_LOGGING_FORMAT"
 
 def weighted_choice(seq, weights, rng=None):
     """
@@ -76,6 +82,101 @@ def weighted_index_choice(weights, rng=None):
         if rnd < 0:
             return i
 
+class RunLogger(object):
+
+    def __init__(self, **kwargs):
+        self.name = kwargs.get("name", "RunLog")
+        self._log = logging.getLogger(self.name)
+        self._log.setLevel(logging.DEBUG)
+        if kwargs.get("log_to_stderr", True):
+            ch1 = logging.StreamHandler()
+            stderr_logging_level = self.get_logging_level(kwargs.get("stderr_logging_level", logging.INFO))
+            ch1.setLevel(stderr_logging_level)
+            ch1.setFormatter(self.get_default_formatter())
+            self._log.addHandler(ch1)
+        if kwargs.get("log_to_file", True):
+            log_stream = kwargs.get("log_stream", \
+                open(kwargs.get("log_path", self.name + ".log"), "w"))
+            ch2 = logging.StreamHandler(log_stream)
+            file_logging_level = self.get_logging_level(kwargs.get("file_logging_level", logging.DEBUG))
+            ch2.setLevel(file_logging_level)
+            ch2.setFormatter(self.get_default_formatter())
+            self._log.addHandler(ch2)
+
+    def get_logging_level(self, level=None):
+        if level in [logging.NOTSET, logging.DEBUG, logging.INFO, logging.WARNING,
+            logging.ERROR, logging.CRITICAL]:
+            return level
+        elif level is not None:
+            level_name = str(level).upper()
+        elif _LOGGING_LEVEL_ENVAR in os.environ:
+            level_name = os.environ[_LOGGING_LEVEL_ENVAR].upper()
+        else:
+            level_name = "NOTSET"
+        if level_name == "NOTSET":
+            level = logging.NOTSET
+        elif level_name == "DEBUG":
+            level = logging.DEBUG
+        elif level_name == "INFO":
+            level = logging.INFO
+        elif level_name == "WARNING":
+            level = logging.WARNING
+        elif level_name == "ERROR":
+            level = logging.ERROR
+        elif level_name == "CRITICAL":
+            level = logging.CRITICAL
+        else:
+            level = logging.NOTSET
+        return level
+
+    def get_default_formatter(self):
+        f = logging.Formatter("[%(asctime)s] %(message)s")
+        f.datefmt='%Y-%m-%d %H:%M:%S'
+        return f
+
+    def get_rich_formatter(self):
+        f = logging.Formatter("[%(asctime)s] %(filename)s (%(lineno)d): %(levelname) 8s: %(message)s")
+        f.datefmt='%Y-%m-%d %H:%M:%S'
+        return f
+
+    def get_simple_formatter(self):
+        return logging.Formatter("%(levelname) 8s: %(message)s")
+
+    def get_raw_formatter(self):
+        return logging.Formatter("%(message)s")
+
+    def get_logging_formatter(self, format=None):
+        if format is not None:
+            format = format.upper()
+        elif _LOGGING_FORMAT_ENVAR in os.environ:
+            format = os.environ[_LOGGING_FORMAT_ENVAR].upper()
+        if format == "RICH":
+            logging_formatter = self.get_rich_formatter()
+        elif format == "SIMPLE":
+            logging_formatter = self.get_simple_formatter()
+        elif format == "NONE":
+            logging_formatter = self.get_raw_formatter()
+        else:
+            logging_formatter = self.get_default_formatter()
+        if logging_formatter is not None:
+            logging_formatter.datefmt='%H:%M:%S'
+
+    def debug(self, msg, *args, **kwargs):
+        self._log.debug(msg, *args, **kwargs)
+
+    def info(self, msg, *args, **kwargs):
+        self._log.info(msg, *args, **kwargs)
+
+    def warning(self, msg, *args, **kwargs):
+        self._log.warning(msg, *args, **kwargs)
+
+    def error(self, msg, *args, **kwargs):
+        self._log.error(msg, *args, **kwargs)
+
+    def critical(self, msg, *args, **kwargs):
+        self._log.critical(msg, *args, **kwargs)
+
+
 class Habitat(object):
     """
     A single node in the landscape graph.
@@ -104,6 +205,7 @@ class Habitat(object):
     """
 
     def __init__(self,
+            label,
             system,
             island,
             fitness_function=None,
@@ -127,6 +229,7 @@ class Habitat(object):
                 supported by this habitat.
         """
 
+        self.label = label
         self.system = system
         self.rng = system.rng
         self.island = island
@@ -169,16 +272,27 @@ class Habitat(object):
         Integrate migrants from last round of dispersals into population.
         """
         for lineage in self.migrants:
-            self.populations[lineage] += 1
+            try:
+                self.populations[lineage] += 1
+            except KeyError:
+                self.populations[lineage] = 1
         self.migrants = []
 
     def reproduce_populations(self):
         """
         Constitutes next generation.
         """
-        self.populations.clear()
         lineages, probs = self._get_lineage_selection_probabilities()
+
+        print("-- {} --".format(self.label))
+        print("     lineages: {}".format(lineages))
+        print("probabilities: {}".format(probs))
+
+        self.populations.clear()
         pop_sizes = numpy.random.multinomial(self.carrying_capacity, probs)
+
+        print("  populations: {}".format(pop_sizes))
+
         assert len(lineages) == len(pop_sizes)
         for lineage, pop_size in zip(lineages, pop_sizes):
             self.populations[lineage] = pop_size
@@ -192,10 +306,10 @@ class Habitat(object):
         if self.rng.random() <= self._aggregate_rate_of_dispersal:
             dest = weighted_choice(self._dispersal_dest_list, self._dispersal_rate_list, rng=self.rng)
             lineage = weighted_choice(self.populations.keys(), self.populations.values(), rng=self.rng)
-            dist.migrants.append(lineage)
+            dest.migrants.append(lineage)
 
     def clean_up(self):
-        lineages_to_delete = [lineage for lineage in self.populations if self.populations[lineages] <= 0]
+        lineages_to_delete = [lineage for lineage in self.populations if self.populations[lineage] <= 0]
         for lineage in lineages_to_delete:
             del(self.populations[lineage])
 
@@ -248,8 +362,8 @@ class Habitat(object):
         """
         Split dictionary into list of destinations and rates.
         """
-        self._dispersal_dest_list.clear()
-        self._dispersal_rate_list.clear()
+        self._dispersal_dest_list = []
+        self._dispersal_rate_list = []
         sum_of_rates = 0.0
         for dest in self._dispersal_rates:
             rate = self._dispersal_rates[dest]
@@ -315,32 +429,59 @@ class Island(object):
         self.isolation_factor = collections.defaultdict(int)
 
 class Lineage(object):
-    pass
+
+    def __init__(self):
+        self.age = 0.0
+        self.descendents = []
+
+    def __repr__(self):
+        return str(id(self))
 
 class System(object):
 
-    def __init__(self):
-        self.rng = random.Random()
+    def __init__(self, random_seed=None):
+        self.logger = RunLogger(name="supertramp")
+        if random_seed is None:
+            self.random_seed = random.randint(0, sys.maxsize)
+        else:
+            self.random_seed = random_seed
+        self.logger.info("Initializing with random seed {}".format(self.random_seed))
+        self.rng = random.Random(self.random_seed)
         self.habitats = []
+        self.seed_lineage = Lineage()
+        self.log_frequency = 1
+        self.current_gen = 0
 
     def bootstrap(self):
+        self.logger.info("Bootstrapping ...")
         for i in range(4):
             h = Habitat(
+                    label="{}".format(i+1),
                     system=self,
                     island=None)
             self.habitats.append(h)
         for h1 in self.habitats:
             for h2 in self.habitats:
                 if h1 is not h2:
-                    h1.set_dispersal_rate(h2, 0.001)
+                    h1.set_dispersal_rate(h2, 1)
+        self.habitats[0].populations[self.seed_lineage] = 1
 
     def run(self, ngens):
         for i in range(ngens):
+            self.current_gen += 1
+            if self.current_gen % self.log_frequency == 0:
+                self.logger.info("Executing life-cycle {}".format(self.current_gen))
             for h in self.habitats:
                 h.execute_lifecycle()
 
 def main():
-    sys = System()
+    parser = argparse.ArgumentParser(description="Biogeographical simulator")
+
+    parser.add_argument("-z", "--random-seed",
+            default=None,
+            help="Seed for random number generator engine.")
+    args = parser.parse_args()
+    sys = System(random_seed=args.random_seed)
     sys.bootstrap()
     sys.run(100)
 
