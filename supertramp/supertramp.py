@@ -31,6 +31,7 @@
 ##
 ##############################################################################
 
+import io
 import sys
 import argparse
 import random
@@ -433,6 +434,7 @@ class Lineage(object):
     def __init__(self, parent=None):
         Lineage.counter += 1
         self.index = Lineage.counter
+        self.label = "s{}".format(self.index)
         self.age = 0
         self.parent = parent
         self.child_nodes = []
@@ -491,15 +493,44 @@ class Lineage(object):
         self.child_nodes.append(c2)
         return (c1, c2)
 
-    @property
-    def label(self):
-        return "s{}".format(self.index)
-
     def __str__(self):
         return self.label
 
     def __repr__(self):
         return "<Lineage {}>".format(self.label)
+
+    ###########################################################################
+    ## Hacked-in NEWICK representation.
+
+    def as_newick_string(self, **kwargs):
+        """
+        This returns the Node as a NEWICK statement according to the given
+        formatting rules. This should be used for debugging purposes only.
+        For production purposes, use the the full-fledged 'as_string()'
+        method of the object.
+        """
+        out = io.StringIO()
+        self.write_newick(out, **kwargs)
+        return out.getvalue()
+
+    def write_newick(self, out, **kwargs):
+        """
+        This returns the Node as a NEWICK statement according to the given
+        formatting rules. This should be used for debugging purposes only.  For
+        production purposes, use the the full-fledged 'write_to_stream()'
+        method of the object.
+        """
+        child_nodes = self.child_nodes
+        if child_nodes:
+            out.write('(')
+            f_child = child_nodes[0]
+            for child in child_nodes:
+                if child is not f_child:
+                    out.write(',')
+                child.write_newick(out, **kwargs)
+            out.write(')')
+        out.write(self.label)
+        out.write(":{}".format(self.age))
 
 class System(object):
 
@@ -589,6 +620,7 @@ def main():
     sys = System(random_seed=args.random_seed)
     sys.bootstrap()
     sys.run(100)
+    print(sys.seed_lineage.as_newick_string())
 
 if __name__ == "__main__":
     main()
