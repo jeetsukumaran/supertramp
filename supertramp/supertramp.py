@@ -443,11 +443,11 @@ class Lineage(object):
         """
         Grows tree by adding ``ngens`` time unit(s) to all tips.
         """
-        if self.parent is None:
-            self.age += 1
-        else:
+        if self.child_nodes:
             for nd in self.leaf_iter():
                 nd.age += 1
+        else:
+            self.age += 1
 
     def leaf_iter(self, filter_fn=None):
         """
@@ -456,9 +456,9 @@ class Lineage(object):
         tree).
         """
         if filter_fn:
-            ff = lambda x: x.parent is None and filter_fn(x) or None
+            ff = lambda x: (not x.child_nodes) and filter_fn(x) or None
         else:
-            ff = lambda x: x.parent is None and x or None
+            ff = lambda x: (not x.child_nodes) and x or None
         for node in self.postorder_iter(ff):
             yield node
 
@@ -591,8 +591,13 @@ class System(object):
                         lineage_habitats[lineage] = [h]
             birth_rate = len(lineage_habitats) * self.global_lineage_birth_rate
             if self.rng.uniform(0, 1) <= birth_rate:
+                print("\n# Diversifying #")
+                print(".. Current tree: {}".format(self.seed_lineage.as_newick_string()))
                 target_lineage = self.rng.choice(list(lineage_habitats.keys()))
+                print(".. Lineage selected for splitting: {}".format(target_lineage))
                 c1, c2 = target_lineage.diversify()
+                print(".. Lineage daughters: {}, {}".format(c1, c2))
+                print(".. New tree: {}".format(self.seed_lineage.as_newick_string()))
                 target_habitat = self.rng.choice(lineage_habitats[target_lineage])
                 for h in self.habitats:
                     if h is target_habitat:
