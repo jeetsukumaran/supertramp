@@ -487,6 +487,8 @@ class Lineage(object):
         Spawns two child lineages with self as parent.
         Returns tuple consisting of these two lineages.
         """
+        if self.child_nodes:
+            raise Exception("Trying to diversify internal node: {}: {}".format(self.label, ", ".join(c.label for c in self.child_nodes)))
         c1 = Lineage(parent=self)
         c2 = Lineage(parent=self)
         self.child_nodes.append(c1)
@@ -631,7 +633,7 @@ def main():
     parser = argparse.ArgumentParser(description="Biogeographical simulator")
 
     parser.add_argument("ngens",
-            nargs="*",
+            type=int,
             default=1000,
             help="Number of generations to run (default = %(default)s).")
     parser.add_argument("-z", "--random-seed",
