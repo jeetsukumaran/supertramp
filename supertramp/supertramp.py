@@ -567,6 +567,7 @@ class System(object):
         self.habitats[0].populations[self.seed_lineage] = 1
 
     def run(self, ngens):
+        # split_lineages = []
         for i in range(ngens):
             self.current_gen += 1
             self.seed_lineage.add_age_to_tips(1)
@@ -583,6 +584,9 @@ class System(object):
             lineage_habitats = {}
             for h in self.habitats:
                 for lineage in h.populations:
+                    # if lineage in split_lineages:
+                    #     print("#### Split lineage '{}' found in habitat '{}'".format(lineage.label, h.label))
+                    # assert lineage not in split_lineages
                     if h.populations[lineage] <= 0:
                         continue
                     try:
@@ -591,28 +595,36 @@ class System(object):
                         lineage_habitats[lineage] = [h]
             birth_rate = len(lineage_habitats) * self.global_lineage_birth_rate
             if self.rng.uniform(0, 1) <= birth_rate:
-                print("\n# Diversifying #")
-                print(".. Current tree: {}".format(self.seed_lineage.as_newick_string()))
                 target_lineage = self.rng.choice(list(lineage_habitats.keys()))
-                print(".. Lineage selected for splitting: {}".format(target_lineage))
                 c1, c2 = target_lineage.diversify()
-                print(".. Lineage daughters: {}, {}".format(c1, c2))
-                print(".. New tree: {}".format(self.seed_lineage.as_newick_string()))
                 target_habitat = self.rng.choice(lineage_habitats[target_lineage])
+                # print("\n# Diversifying #")
+                # print(".. Current tree: {}".format(self.seed_lineage.as_newick_string()))
+                # print(".. Lineage selected for splitting: {}".format(target_lineage))
+                # split_lineages.append(target_lineage)
+                # print(".. Lineage daughters: {}, {}".format(c1, c2))
+                # print(".. New tree: {}".format(self.seed_lineage.as_newick_string()))
+                # print(".. Habitat selected for splitting: {}".format(target_habitat.label))
                 for h in self.habitats:
                     if h is target_habitat:
                         # note that if populations need sync/management, this
                         # will not do
                         h.populations[c2] = h.populations[target_lineage]
-                        # print(">>>> {}".format(h.populations[c2]))
+                        # print("Removing {} from population in {} and replacing with {}".format(target_lineage, h.label, c2))
                         del h.populations[target_lineage]
                     else:
                         if target_lineage in h.populations:
                             # note that if populations need sync/management, this
                             # will not do
                             h.populations[c1] = h.populations[target_lineage]
-                            # print("---- {}".format(h.populations[c1]))
+                            # print("Removing {} from population in {} and replacing with {}".format(target_lineage, h.label, c1))
                             del h.populations[target_lineage]
+                    if target_lineage in h.migrants:
+                        # print("Removing {} from migrants in {} and replacing with {}".format(target_lineage, h.label, c1))
+                        while target_lineage in h.migrants:
+                            h.migrants.remove(target_lineage)
+                            h.migrants.append(c1)
+
             #########################################################################
 
 def main():
