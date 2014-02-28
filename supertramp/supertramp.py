@@ -630,13 +630,17 @@ class System(object):
 def main():
     parser = argparse.ArgumentParser(description="Biogeographical simulator")
 
+    parser.add_argument("ngens",
+            nargs="*",
+            default=1000,
+            help="Number of generations to run (default = %(default)s).")
     parser.add_argument("-z", "--random-seed",
             default=None,
             help="Seed for random number generator engine.")
     args = parser.parse_args()
     sys = System(random_seed=args.random_seed)
     sys.bootstrap()
-    sys.run(100)
+    sys.run(args.ngens)
     print(sys.seed_lineage.as_newick_string())
 
 if __name__ == "__main__":
