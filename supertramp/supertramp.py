@@ -147,13 +147,17 @@ class Habitat(object):
     def __init__(self, habitat_type):
         self.habitat_type = habitat_type
         self.lineages = set()
-        self.migrants = []
+        self.migrants = set()
 
     def process_migrants(self):
         for lineage in self.migrants:
             if lineage not in self.lineages:
-                lineages.add(lineage)
+                self.lineages.add(lineage)
         self.migrants.clear()
+
+    def receive_migrant(self, lineage):
+        if lineage not in self.migrants:
+            self.migrants.add(lineage)
 
 class Island(object):
 
@@ -227,7 +231,11 @@ class Island(object):
     def disperse_to(self, destination_island):
         habitat = self.rng.choice(self.dispersal_source_habitat_list)
         lineage = self.rng.choice(habitat.lineages)
-        destination_island.habitats_by_type[habitat_type].migrants.append(lineage)
+        destination_island.receive_migrant(lineage=lineage, habitat_type=habitat_type)
+        destination_island.receive_migrant(lineage=lineage, habitat_type=habitat_type)
+
+    def receive_migrant(self, lineage, habitat_type):
+        self.habitats_by_type[habitat_type].receive_migrant(lineage)
 
 class Lineage(object):
 
@@ -336,7 +344,6 @@ class Lineage(object):
         out.write(self.label)
         out.write(":{}".format(self.age))
 
-
 class System(object):
 
     def __init__(self, random_seed=None):
@@ -386,6 +393,9 @@ class System(object):
             for isl2 in self.islands:
                 if isl1 is not isl2:
                     isl1.set_dispersal_rate(isl2, island_dispersal_rate)
+
+        # seed lineage
+        self.islands[0].habitat_list[0].receive_migrant(self.phylogeny)
 
     def execute_life_cycle(self):
         self.current_gen += 1
