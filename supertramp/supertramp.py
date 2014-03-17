@@ -146,22 +146,88 @@ class Habitat(object):
 
     def __init__(self, habitat_type):
         self.habitat_type = habitat_type
-        pass
+        self.lineages = set()
+        self.migrants = []
+
+    def process_migrants(self):
+        for lineage in self.migrants:
+            if lineage not in self.lineages:
+                lineages.add(lineage)
+        self.migrants.clear()
 
 class Island(object):
 
     def __init__(self,
             rng,
             habitat_types,
-            dispersal_habitat_types=None):
+            dispersal_rates=None,
+            dispersal_source_habitat_types=None):
         self.rng = rng
         self.habitat_types = habitat_types
-        self.dispersal_habitat_types = dispersal_habitat_types
-        self.habitats = {}
-        self.lineages = collections.OrderedDict()
+        self.habitat_list = []
+        self.habitats_by_type = {}
+        if dispersal_source_habitat_types is None:
+            self.dispersal_source_habitat_types = []
+        else:
+            self.dispersal_source_habitat_types = dispersal_source_habitat_types
+        self.dispersal_source_habitat_list = []
+
+        # Rate of dispersal to other habitats:
+        #   - keys = destination (Habitat object)
+        #   - values = rate (float)
+        self._dispersal_rates = collections.OrderedDict()
+        self._dispersal_dest_list = []
+        self._dispersal_rate_list = []
+        self._aggregate_rate_of_dispersal = 0.0
+        if dispersal_rates is not None:
+            for dest in dispersal_rates:
+                self._dispersal_rates[dest] = dispersal_rates[dest]
+            self.compile_dispersal_rates()
+
+        # construct habitats
         for ht in self.habitat_types:
             h = Habitat(habitat_type=ht)
-            self.habitats[ht] = h
+            self.habitat_list.append(h)
+            self.habitats_by_type[ht] = h
+            if ht in self.dispersal_source_habitat_types:
+                self.dispersal_source_habitat_list.append(h)
+
+    def set_dispersal_rate(self, dest, rate):
+        """
+        Set a specific dispersal.
+        """
+        self._dispersal_rates[dest] = rate
+        self._dispersal_dest_list = []
+        self._dispersal_rate_list = []
+        self._aggregate_rate_of_dispersal = 0.0
+
+    def compile_dispersal_rates(self):
+        """
+        Split dictionary into list of destinations and rates.
+        """
+        self._dispersal_dest_list = []
+        self._dispersal_rate_list = []
+        sum_of_rates = 0.0
+        for dest in self._dispersal_rates:
+            rate = self._dispersal_rates[dest]
+            self._dispersal_dest_list.append(dest)
+            self._dispersal_rate_list.append(rate)
+            sum_of_rates += rate
+        self._aggregate_rate_of_dispersal = sum_of_rates
+
+    def run_dispersals(self):
+        if self.rng.uniform(0, 1) <= self._aggregate_rate_of_dispersal:
+            dest = weighted_choice(self._dispersal_dest_list, self._dispersal_rate_list, rng=self.rng)
+            self.disperse_to(dest)
+
+    def process_migrants(self):
+        for habitat in self.habitat_list:
+            habitat.process_migrants()
+
+    def disperse_to(self, destination_island):
+        habitat = self.rng.choice(self.dispersal_source_habitat_list)
+        lineage = self.rng.choice(habitat.lineages)
+        destination_island.habitats_by_type[habitat_type].migrants.append(lineage)
 
 class Lineage(object):
 
@@ -290,26 +356,63 @@ class System(object):
         self.habitat_types = []
         self.islands = []
         self.phylogeny = None
+
+        self.global_dispersal_rate = 0.01
+
         self.bootstrap()
 
     def bootstrap(self):
         self.phylogeny = Lineage()
+
         for ht_label in self.habitat_type_labels:
             h = HabitatType(label=ht_label)
             self.habitat_types.append(h)
-        if self.dispersal_model = "unconstrained":
-            self.dispersal_habitat_types = list(self.habitat_types)
+
+        if self.dispersal_model == "unconstrained":
+            self.dispersal_source_habitat_types = list(self.habitat_types)
         else:
-            self.dispersal_habitat_types = self.habitat_types[0]
+            self.dispersal_source_habitat_types = self.habitat_types[0]
+
         for isl_idx in range(self.num_islands):
             island = Island(
                     rng=self.rng,
                     habitat_types=self.habitat_types,
-                    dispersal_habitat_types=self.dispersal_habitat_types)
+                    dispersal_source_habitat_types=self.dispersal_source_habitat_types)
+            self.islands.append(island)
+
+        # sum of rates of dispersing out of any island == global dispersal rate
+        island_dispersal_rate = self.global_dispersal_rate / ((len(self.islands) ** 2) - 1)
+        for isl1 in self.islands:
+            for isl2 in self.islands:
+                if isl1 is not isl2:
+                    isl1.set_dispersal_rate(isl2, island_dispersal_rate)
 
     def execute_life_cycle(self):
         self.current_gen += 1
         self.phylogeny.add_age_to_tips(1)
-            if self.current_gen % self.log_frequency == 0:
-                self.logger.info("Executing life-cycle {}".format(self.current_gen))
+        if self.current_gen % self.log_frequency == 0:
+            self.logger.info("Executing life-cycle {}".format(self.current_gen))
+        for island in self.islands:
+            island.run_dispersals()
+        for island in self.islands:
+            island.process_migrants()
 
+def main():
+    parser = argparse.ArgumentParser(description="Biogeographical simulator")
+
+    parser.add_argument("ngens",
+            type=int,
+            default=1000,
+            help="Number of generations to run (default = %(default)s).")
+    parser.add_argument("-z", "--random-seed",
+            default=None,
+            help="Seed for random number generator engine.")
+    args = parser.parse_args()
+    sys = System(random_seed=args.random_seed)
+    sys.bootstrap()
+    for x in range(args.ngens):
+        sys.execute_life_cycle()
+    print(sys.phylogeny.as_newick_string())
+
+if __name__ == "__main__":
+    main()
