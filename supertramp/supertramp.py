@@ -38,9 +38,17 @@ import random
 import logging
 import collections
 import numpy
+import inspect
 
 _LOGGING_LEVEL_ENVAR = "SUPERTRAMP_LOGGING_LEVEL"
 _LOGGING_FORMAT_ENVAR = "SUPERTRAMP_LOGGING_FORMAT"
+
+def dump_stack():
+    for frame, filename, line_num, func, source_code, source_index in inspect.stack()[2:]:
+        if source_code is None:
+            print("{}: {}".format(filename, line_num))
+        else:
+            print("{}: {}: {}".format(filename, line_num, source_code[source_index].strip()))
 
 class RunLogger(object):
 
@@ -241,13 +249,18 @@ class Lineage(object):
 
     counter = 0
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, habitat_type=None):
         Lineage.counter += 1
+        print("Creating: {}".format(Lineage.counter))
         self.index = Lineage.counter
-        self.label = "s{}".format(self.index)
         self.age = 0
         self.parent = parent
+        self.habitat_type = habitat_type
         self.child_nodes = []
+
+    @property
+    def label(self):
+        return "S{:d}.{}".format(self.index, self.habitat_type.label)
 
     def add_age_to_tips(self, ngens=1):
         """
@@ -366,10 +379,8 @@ class System(object):
 
         self.global_dispersal_rate = 0.01
 
-        self.bootstrap()
-
     def bootstrap(self):
-        self.phylogeny = Lineage()
+
 
         for ht_label in self.habitat_type_labels:
             h = HabitatType(label=ht_label)
@@ -378,7 +389,9 @@ class System(object):
         if self.dispersal_model == "unconstrained":
             self.dispersal_source_habitat_types = list(self.habitat_types)
         else:
-            self.dispersal_source_habitat_types = self.habitat_types[0]
+            self.dispersal_source_habitat_types = [self.habitat_types[0]]
+        self.seed_habitat = self.dispersal_source_habitat_types[0]
+        self.phylogeny = Lineage(parent=None, habitat_type=self.seed_habitat)
 
         for isl_idx in range(self.num_islands):
             island = Island(
