@@ -39,6 +39,7 @@ import logging
 import collections
 import numpy
 import inspect
+from BitVector import BitVector
 
 _LOGGING_LEVEL_ENVAR = "SUPERTRAMP_LOGGING_LEVEL"
 _LOGGING_FORMAT_ENVAR = "SUPERTRAMP_LOGGING_FORMAT"
@@ -171,11 +172,18 @@ class Habitat(object):
 
     def add_lineage(self, lineage):
         self.lineages.add(lineage)
+        lineage.register_habitat(self)
+
+    def remove_lineage(self, lineage):
+        self.lineages.remove(lineage)
+        lineage.deregister_habitat(self)
 
     def __str__(self):
         return "{}-{}".format(self.island.label, self.habitat_type.label)
 
 class Island(object):
+
+    counter = 0
 
     def __init__(self,
             rng,
@@ -183,6 +191,8 @@ class Island(object):
             habitat_types,
             dispersal_rates=None,
             dispersal_source_habitat_types=None):
+        self.index = Island.counter
+        Island.counter += 1
         self.rng = rng
         self.label = label
         self.habitat_types = habitat_types
@@ -267,17 +277,34 @@ class Lineage(object):
 
     counter = 0
 
-    def __init__(self, parent, habitat_type):
+    def __init__(self,
+            parent,
+            habitat_type,
+            system):
         Lineage.counter += 1
         self.index = Lineage.counter
         self.age = 0
         self.parent = parent
         self.habitat_type = habitat_type
+        self.system = system
         self.child_nodes = []
+
+        # Note that all islands and habitat types need to be defined for this
+        # to work (or at least, the maximum number of habitat types and islands
+        # must be known.
+        self.island_localities = BitVector(size=self.system.num_islands)
+
+    def register_habitat(self, habitat):
+        self.island_localities[habitat.island.index] = 1
+
+    def deregister_habitat(self, habitat):
+        self.island_localities[habitat.island.index] = 0
 
     @property
     def label(self):
-        return "S{:d}.{}".format(self.index, self.habitat_type.label)
+        return "S{:d}.{}.{}".format(self.index,
+                self.island_localities,
+                self.habitat_type.label)
 
     def add_age_to_tips(self, ngens=1):
         """
@@ -329,8 +356,8 @@ class Lineage(object):
         """
         if self.child_nodes:
             raise Exception("Trying to diversify internal node: {}: {}".format(self.label, ", ".join(c.label for c in self.child_nodes)))
-        c1 = Lineage(parent=self, habitat_type=self.habitat_type)
-        c2 = Lineage(parent=self, habitat_type=self.habitat_type)
+        c1 = Lineage(parent=self, habitat_type=self.habitat_type, system=self.system)
+        c2 = Lineage(parent=self, habitat_type=self.habitat_type, system=self.system)
         self.child_nodes.append(c1)
         self.child_nodes.append(c2)
         return (c1, c2)
@@ -390,7 +417,7 @@ class System(object):
         self.logger.info("Initializing with random seed {}".format(self.random_seed))
         self.rng = numpy.random.RandomState(seed=[self.random_seed])
 
-        self.island_labels = ["A", "B"]
+        self.island_labels = ["A", "B", "C", "D"]
         self.habitat_type_labels = ["coastal", "interior", "deep"]
         self.dispersal_model = "unconstrained"
         self.habitat_types = []
@@ -407,6 +434,7 @@ class System(object):
         for ht_label in self.habitat_type_labels:
             h = HabitatType(label=ht_label)
             self.habitat_types.append(h)
+        self.all_habitat_types_bitmask = (1 << len(self.islands)) - 1
 
         # set up dispersal regime
         if self.dispersal_model == "unconstrained":
@@ -422,6 +450,7 @@ class System(object):
                     habitat_types=self.habitat_types,
                     dispersal_source_habitat_types=self.dispersal_source_habitat_types)
             self.islands.append(island)
+        self.all_islands_bitmask = (1 << len(self.islands)) - 1
 
         # sum of rates of dispersing out of any island == global dispersal rate
         island_dispersal_rate = self.global_dispersal_rate / ((len(self.islands) ** 2) - 1)
@@ -432,10 +461,17 @@ class System(object):
 
         # initialize lineages
         self.seed_habitat = self.dispersal_source_habitat_types[0]
-        self.phylogeny = Lineage(parent=None, habitat_type=self.seed_habitat)
+        self.phylogeny = Lineage(
+                parent=None,
+                habitat_type=self.seed_habitat,
+                system=self)
 
         # seed lineage
         self.islands[0].habitat_list[0].receive_migrant(self.phylogeny)
+
+    @property
+    def num_islands(self):
+        return len(self.islands)
 
     def execute_life_cycle(self):
         self.current_gen += 1
@@ -461,7 +497,7 @@ class System(object):
                         lineage_localities.append(habitat)
             target = self.rng.choice(lineage_localities)
             for habitat in lineage_localities:
-                habitat.lineages.remove(diversifying_lineage)
+                habitat.remove_lineage(diversifying_lineage)
                 if habitat is target:
                     # sympatric speciation: "old" species retained in original habitat on island
                     # new species added to new habitat on island
