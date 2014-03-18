@@ -159,13 +159,14 @@ class Habitat(object):
 
     def process_migrants(self):
         for lineage in self.migrants:
-            if lineage not in self.lineages:
-                self.lineages.add(lineage)
+            self.add_lineage(lineage)
         self.migrants.clear()
 
     def receive_migrant(self, lineage):
-        if lineage not in self.migrants:
-            self.migrants.add(lineage)
+        self.migrants.add(lineage)
+
+    def add_lineage(self, lineage):
+        self.lineages.add(lineage)
 
 class Island(object):
 
@@ -243,7 +244,12 @@ class Island(object):
         destination_island.receive_migrant(lineage=lineage, habitat_type=habitat_type)
 
     def receive_migrant(self, lineage, habitat_type):
+        assert lineage.habitat_type is habitat_type
         self.habitats_by_type[habitat_type].receive_migrant(lineage)
+
+    def add_lineage(self, lineage, habitat_type):
+        assert lineage.habitat_type is habitat_type
+        self.habitats_by_type[habitat_type].add_lineage(lineage)
 
 class Lineage(object):
 
@@ -324,6 +330,9 @@ class Lineage(object):
     def __repr__(self):
         return "<Lineage {}>".format(self.label)
 
+    def leaf_nodes(self):
+        return list(nd for nd in self.leaf_iter())
+
     ###########################################################################
     ## Hacked-in NEWICK representation.
 
@@ -378,21 +387,23 @@ class System(object):
         self.phylogeny = None
 
         self.global_dispersal_rate = 0.01
+        self.global_lineage_birth_rate = 0.01
+        self.global_lineage_death_rate = 0.01
 
     def bootstrap(self):
 
-
+        # create habitat types
         for ht_label in self.habitat_type_labels:
             h = HabitatType(label=ht_label)
             self.habitat_types.append(h)
 
+        # set up dispersal regime
         if self.dispersal_model == "unconstrained":
             self.dispersal_source_habitat_types = list(self.habitat_types)
         else:
             self.dispersal_source_habitat_types = [self.habitat_types[0]]
-        self.seed_habitat = self.dispersal_source_habitat_types[0]
-        self.phylogeny = Lineage(parent=None, habitat_type=self.seed_habitat)
 
+        # create islands
         for isl_idx in range(self.num_islands):
             island = Island(
                     rng=self.rng,
@@ -407,6 +418,10 @@ class System(object):
                 if isl1 is not isl2:
                     isl1.set_dispersal_rate(isl2, island_dispersal_rate)
 
+        # initialize lineages
+        self.seed_habitat = self.dispersal_source_habitat_types[0]
+        self.phylogeny = Lineage(parent=None, habitat_type=self.seed_habitat)
+
         # seed lineage
         self.islands[0].habitat_list[0].receive_migrant(self.phylogeny)
 
@@ -419,6 +434,26 @@ class System(object):
             island.run_dispersals()
         for island in self.islands:
             island.process_migrants()
+        self.run_diversification()
+
+    def run_diversification(self):
+        tips = self.phylogeny.leaf_nodes()
+        if self.rng.uniform(0, 1) <= self.global_lineage_birth_rate:
+            diversifying_lineage = self.rng.choice(tips)
+            c0, c1 = diversifying_lineage.diversify()
+            c1.habitat_type = self.rng.choice(self.habitat_types)
+            lineage_localities = []
+            for island in self.islands:
+                for habitat in island.habitat_list:
+                    if diversifying_lineage in habitat.lineages:
+                        lineage_localities.append( (island, habitat) )
+            target = self.rng.choice(lineage_localities)
+            for island, habitat in lineage_localities:
+                habitat.lineages.remove(diversifying_lineage)
+                if habitat is target[1]:
+                    island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
+                else:
+                    island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
 
 def main():
     parser = argparse.ArgumentParser(description="Biogeographical simulator")
