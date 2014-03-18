@@ -145,18 +145,27 @@ class RunLogger(object):
     def critical(self, msg, *args, **kwargs):
         self._log.critical(msg, *args, **kwargs)
 
+class IndexedInstances(object):
 
-class HabitatType(object):
+    counter = 0
+
+    def __init__(self):
+        self.index = self.__class__.counter
+        self.__class__.counter += 1
+
+class HabitatType(IndexedInstances):
 
     def __init__(self, label):
+        super(HabitatType, self).__init__()
         self.label = label
 
     def __str__(self):
         return self.label
 
-class Habitat(object):
+class Habitat(IndexedInstances):
 
     def __init__(self, habitat_type, island):
+        super(Habitat, self).__init__()
         self.habitat_type = habitat_type
         self.island = island
         self.lineages = set()
@@ -181,9 +190,7 @@ class Habitat(object):
     def __str__(self):
         return "{}-{}".format(self.island.label, self.habitat_type.label)
 
-class Island(object):
-
-    counter = 0
+class Island(IndexedInstances):
 
     def __init__(self,
             rng,
@@ -191,8 +198,7 @@ class Island(object):
             habitat_types,
             dispersal_rates=None,
             dispersal_source_habitat_types=None):
-        self.index = Island.counter
-        Island.counter += 1
+        super(Island, self).__init__()
         self.rng = rng
         self.label = label
         self.habitat_types = habitat_types
@@ -292,19 +298,25 @@ class Lineage(object):
         # Note that all islands and habitat types need to be defined for this
         # to work (or at least, the maximum number of habitat types and islands
         # must be known.
+        self.habitat_types = BitVector(size=self.system.num_habitat_types)
         self.island_localities = BitVector(size=self.system.num_islands)
+        self.habitats = BitVector(size=self.system.num_islands * self.system.num_habitat_types)
 
     def register_habitat(self, habitat):
+        self.habitats[habitat.index] = 1
         self.island_localities[habitat.island.index] = 1
+        self.habitat_types[habitat.habitat_type.index] = 1
 
     def deregister_habitat(self, habitat):
+        self.habitats[habitat.index] = 0
         self.island_localities[habitat.island.index] = 0
+        self.habitat_types[habitat.habitat_type.index] = 0
 
     @property
     def label(self):
         return "S{:d}.{}.{}".format(self.index,
                 self.island_localities,
-                self.habitat_type.label)
+                self.habitat_types)
 
     def add_age_to_tips(self, ngens=1):
         """
@@ -472,6 +484,10 @@ class System(object):
     @property
     def num_islands(self):
         return len(self.islands)
+
+    @property
+    def num_habitat_types(self):
+        return len(self.habitat_types)
 
     def execute_life_cycle(self):
         self.current_gen += 1
