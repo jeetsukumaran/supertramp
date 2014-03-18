@@ -150,6 +150,9 @@ class HabitatType(object):
     def __init__(self, label):
         self.label = label
 
+    def __str__(self):
+        return self.label
+
 class Habitat(object):
 
     def __init__(self, habitat_type, island):
@@ -169,14 +172,19 @@ class Habitat(object):
     def add_lineage(self, lineage):
         self.lineages.add(lineage)
 
+    def __str__(self):
+        return "{}-{}".format(self.island.label, self.habitat_type.label)
+
 class Island(object):
 
     def __init__(self,
             rng,
+            label,
             habitat_types,
             dispersal_rates=None,
             dispersal_source_habitat_types=None):
         self.rng = rng
+        self.label = label
         self.habitat_types = habitat_types
         self.habitat_list = []
         self.habitats_by_type = {}
@@ -205,6 +213,9 @@ class Island(object):
             self.habitats_by_type[ht] = h
             if ht in self.dispersal_source_habitat_types:
                 self.dispersal_source_habitat_list.append(h)
+
+    def __str__(self):
+        return self.label
 
     def set_dispersal_rate(self, dest, rate):
         """
@@ -379,7 +390,7 @@ class System(object):
         self.logger.info("Initializing with random seed {}".format(self.random_seed))
         self.rng = numpy.random.RandomState(seed=[self.random_seed])
 
-        self.num_islands = 2
+        self.island_labels = ["A", "B"]
         self.habitat_type_labels = ["coastal", "interior", "deep"]
         self.dispersal_model = "unconstrained"
         self.habitat_types = []
@@ -404,9 +415,10 @@ class System(object):
             self.dispersal_source_habitat_types = [self.habitat_types[0]]
 
         # create islands
-        for isl_idx in range(self.num_islands):
+        for island_label in self.island_labels:
             island = Island(
                     rng=self.rng,
+                    label=island_label,
                     habitat_types=self.habitat_types,
                     dispersal_source_habitat_types=self.dispersal_source_habitat_types)
             self.islands.append(island)
@@ -447,11 +459,13 @@ class System(object):
                 for habitat in island.habitat_list:
                     if diversifying_lineage in habitat.lineages:
                         lineage_localities.append(habitat)
-            print("{}: {}, {}".format(diversifying_lineage, c0, c1))
             target = self.rng.choice(lineage_localities)
             for habitat in lineage_localities:
                 habitat.lineages.remove(diversifying_lineage)
                 if habitat is target:
+                    # sympatric speciation: "old" species retained in original habitat on island
+                    # new species added to new habitat on island
+                    habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
                     habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
                 else:
                     habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
