@@ -51,6 +51,44 @@ def dump_stack():
         else:
             print("{}: {}: {}".format(filename, line_num, source_code[source_index].strip()))
 
+def weighted_choice(seq, weights, rng=None):
+    """
+    Selects an element out of seq, with probabilities of each element
+    given by the list `weights` (which must be at least as long as the
+    length of `seq` - 1).
+    """
+    if weights is None:
+        weights = [1.0/len(seq) for count in range(len(seq))]
+    else:
+        weights = list(weights)
+    if len(weights) < len(seq) - 1:
+        raise Exception("Insufficient number of weights specified")
+    if len(weights) == len(seq) - 1:
+        weights.append(1 - sum(weights))
+    return seq[weighted_index_choice(weights, rng)]
+
+def weighted_index_choice(weights, rng=None):
+    """
+    (From: http://eli.thegreenplace.net/2010/01/22/weighted-random-generation-in-python/)
+    The following is a simple function to implement weighted random choice in
+    Python. Given a list of weights, it returns an index randomly, according
+    to these weights [1].
+    For example, given [2, 3, 5] it returns 0 (the index of the first element)
+    with probability 0.2, 1 with probability 0.3 and 2 with probability 0.5.
+    The weights need not sum up to anything in particular, and can actually be
+    arbitrary Python floating point numbers.
+    If we manage to sort the weights in descending order before passing them
+    to weighted_choice_sub, it will run even faster, since the random call
+    returns a uniformly distributed value and larger chunks of the total
+    weight will be skipped in the beginning.
+    """
+    rnd = rng.uniform(0, 1) * sum(weights)
+    for i, w in enumerate(weights):
+        rnd -= w
+        if rnd < 0:
+            return i
+
+
 class RunLogger(object):
 
     def __init__(self, **kwargs):
@@ -145,27 +183,25 @@ class RunLogger(object):
     def critical(self, msg, *args, **kwargs):
         self._log.critical(msg, *args, **kwargs)
 
-class IndexedInstances(object):
+class HabitatType(object):
 
     counter = 0
 
-    def __init__(self):
+    def __init__(self, label):
         self.index = self.__class__.counter
         self.__class__.counter += 1
-
-class HabitatType(IndexedInstances):
-
-    def __init__(self, label):
-        super(HabitatType, self).__init__()
         self.label = label
 
     def __str__(self):
         return self.label
 
-class Habitat(IndexedInstances):
+class Habitat(object):
+
+    counter = 0
 
     def __init__(self, habitat_type, island):
-        super(Habitat, self).__init__()
+        self.index = self.__class__.counter
+        self.__class__.counter += 1
         self.habitat_type = habitat_type
         self.island = island
         self.lineages = set()
@@ -190,7 +226,9 @@ class Habitat(IndexedInstances):
     def __str__(self):
         return "{}-{}".format(self.island.label, self.habitat_type.label)
 
-class Island(IndexedInstances):
+class Island(object):
+
+    counter = 0
 
     def __init__(self,
             rng,
@@ -198,7 +236,8 @@ class Island(IndexedInstances):
             habitat_types,
             dispersal_rates=None,
             dispersal_source_habitat_types=None):
-        super(Island, self).__init__()
+        self.index = self.__class__.counter
+        self.__class__.counter += 1
         self.rng = rng
         self.label = label
         self.habitat_types = habitat_types
@@ -266,10 +305,12 @@ class Island(IndexedInstances):
             habitat.process_migrants()
 
     def disperse_to(self, destination_island):
-        habitat = self.rng.choice(self.dispersal_source_habitat_list)
-        lineage = self.rng.choice(habitat.lineages)
-        destination_island.receive_migrant(lineage=lineage, habitat_type=habitat_type)
-        destination_island.receive_migrant(lineage=lineage, habitat_type=habitat_type)
+        hx = [h for h in self.dispersal_source_habitat_list if h.lineages]
+        if not hx:
+            return
+        habitat = self.rng.choice(hx)
+        lineage = self.rng.choice(list(habitat.lineages))
+        destination_island.receive_migrant(lineage=lineage, habitat_type=lineage.habitat_type)
 
     def receive_migrant(self, lineage, habitat_type):
         assert lineage.habitat_type is habitat_type
@@ -287,8 +328,8 @@ class Lineage(object):
             parent,
             habitat_type,
             system):
-        Lineage.counter += 1
-        self.index = Lineage.counter
+        self.index = self.__class__.counter
+        self.__class__.counter += 1
         self.age = 0
         self.parent = parent
         self.habitat_type = habitat_type
@@ -470,6 +511,8 @@ class System(object):
             for isl2 in self.islands:
                 if isl1 is not isl2:
                     isl1.set_dispersal_rate(isl2, island_dispersal_rate)
+        for isl1 in self.islands:
+            isl1.compile_dispersal_rates()
 
         # initialize lineages
         self.seed_habitat = self.dispersal_source_habitat_types[0]
