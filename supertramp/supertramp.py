@@ -342,6 +342,7 @@ class Lineage(object):
         self.habitat_types = BitVector(size=self.system.num_habitat_types)
         self.island_localities = BitVector(size=self.system.num_islands)
         self.habitats = BitVector(size=self.system.num_islands * self.system.num_habitat_types)
+        self.final_distribution_label = None
 
     def register_habitat(self, habitat):
         self.habitats[habitat.index] = 1
@@ -355,9 +356,15 @@ class Lineage(object):
 
     @property
     def label(self):
-        return "S{:d}.{}.{}".format(self.index,
-                self.island_localities,
-                self.habitat_types)
+        return "S{:d}.{}".format(self.index, self.distribution_label)
+
+    @property
+    def distribution_label(self):
+        # this label gets locked to `final_distribution_label` when the species
+        # diversifies
+        if self.final_distribution_label is not None:
+            return self.final_distribution_label
+        return "{}.{}".format(self.island_localities, self.habitat_types)
 
     def add_age_to_tips(self, ngens=1):
         """
@@ -402,13 +409,15 @@ class Lineage(object):
                 child_nodes.extend(stack)
                 stack = child_nodes
 
-    def diversify(self):
+    def diversify(self, finalize_distribution_label=True):
         """
         Spawns two child lineages with self as parent.
         Returns tuple consisting of these two lineages.
         """
         if self.child_nodes:
             raise Exception("Trying to diversify internal node: {}: {}".format(self.label, ", ".join(c.label for c in self.child_nodes)))
+        if finalize_distribution_label:
+            self.final_distribution_label = self.distribution_label
         c1 = Lineage(parent=self, habitat_type=self.habitat_type, system=self.system)
         c2 = Lineage(parent=self, habitat_type=self.habitat_type, system=self.system)
         self.child_nodes.append(c1)
@@ -522,7 +531,7 @@ class System(object):
                 system=self)
 
         # seed lineage
-        self.islands[0].habitat_list[0].receive_migrant(self.phylogeny)
+        self.islands[0].habitat_list[0].add_lineage(self.phylogeny)
 
     @property
     def num_islands(self):
@@ -547,7 +556,7 @@ class System(object):
         tips = self.phylogeny.leaf_nodes()
         if self.rng.uniform(0, 1) <= self.global_lineage_birth_rate:
             diversifying_lineage = self.rng.choice(tips)
-            c0, c1 = diversifying_lineage.diversify()
+            c0, c1 = diversifying_lineage.diversify(finalize_distribution_label=True)
             c1.habitat_type = self.rng.choice(self.habitat_types)
             lineage_localities = []
             for island in self.islands:
