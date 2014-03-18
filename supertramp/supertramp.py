@@ -256,7 +256,7 @@ class Lineage(object):
 
     counter = 0
 
-    def __init__(self, parent=None, habitat_type=None):
+    def __init__(self, parent, habitat_type):
         Lineage.counter += 1
         self.index = Lineage.counter
         self.age = 0
@@ -318,8 +318,8 @@ class Lineage(object):
         """
         if self.child_nodes:
             raise Exception("Trying to diversify internal node: {}: {}".format(self.label, ", ".join(c.label for c in self.child_nodes)))
-        c1 = Lineage(parent=self)
-        c2 = Lineage(parent=self)
+        c1 = Lineage(parent=self, habitat_type=self.habitat_type)
+        c2 = Lineage(parent=self, habitat_type=self.habitat_type)
         self.child_nodes.append(c1)
         self.child_nodes.append(c2)
         return (c1, c2)
@@ -447,6 +447,7 @@ class System(object):
                 for habitat in island.habitat_list:
                     if diversifying_lineage in habitat.lineages:
                         lineage_localities.append(habitat)
+            print("{}: {}, {}".format(diversifying_lineage, c0, c1))
             target = self.rng.choice(lineage_localities)
             for habitat in lineage_localities:
                 habitat.lineages.remove(diversifying_lineage)
