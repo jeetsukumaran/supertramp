@@ -152,8 +152,9 @@ class HabitatType(object):
 
 class Habitat(object):
 
-    def __init__(self, habitat_type):
+    def __init__(self, habitat_type, island):
         self.habitat_type = habitat_type
+        self.island = island
         self.lineages = set()
         self.migrants = set()
 
@@ -199,7 +200,7 @@ class Island(object):
 
         # construct habitats
         for ht in self.habitat_types:
-            h = Habitat(habitat_type=ht)
+            h = Habitat(habitat_type=ht, island=self)
             self.habitat_list.append(h)
             self.habitats_by_type[ht] = h
             if ht in self.dispersal_source_habitat_types:
@@ -257,7 +258,6 @@ class Lineage(object):
 
     def __init__(self, parent=None, habitat_type=None):
         Lineage.counter += 1
-        print("Creating: {}".format(Lineage.counter))
         self.index = Lineage.counter
         self.age = 0
         self.parent = parent
@@ -446,14 +446,14 @@ class System(object):
             for island in self.islands:
                 for habitat in island.habitat_list:
                     if diversifying_lineage in habitat.lineages:
-                        lineage_localities.append( (island, habitat) )
+                        lineage_localities.append(habitat)
             target = self.rng.choice(lineage_localities)
-            for island, habitat in lineage_localities:
+            for habitat in lineage_localities:
                 habitat.lineages.remove(diversifying_lineage)
-                if habitat is target[1]:
-                    island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
+                if habitat is target:
+                    habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
                 else:
-                    island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+                    habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
 
 def main():
     parser = argparse.ArgumentParser(description="Biogeographical simulator")
