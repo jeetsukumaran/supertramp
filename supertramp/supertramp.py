@@ -472,7 +472,7 @@ class System(object):
             random_seed=None,
             global_lineage_birth_rate=0.01,
             global_lineage_death_rate=0.01,
-            global_lineage_niche_evolution_rate=0.01,
+            global_lineage_niche_evolution_probability=0.01,
             global_dispersal_rate=0.01,
             log_frequency=100
             ):
@@ -495,7 +495,7 @@ class System(object):
 
         self.global_lineage_birth_rate = global_lineage_birth_rate
         self.global_lineage_death_rate = global_lineage_death_rate
-        self.global_lineage_niche_evolution_rate = global_lineage_niche_evolution_rate
+        self.global_lineage_niche_evolution_probability = global_lineage_niche_evolution_probability
         self.global_dispersal_rate = global_dispersal_rate
 
     def bootstrap(self):
@@ -562,10 +562,11 @@ class System(object):
 
     def run_diversification(self):
         tips = self.phylogeny.leaf_nodes()
-        if self.rng.uniform(0, 1) <= self.global_lineage_birth_rate:
+        if self.rng.uniform(0, 1) <= self.global_lineage_birth_rate * len(tips):
             diversifying_lineage = self.rng.choice(tips)
             c0, c1 = diversifying_lineage.diversify(finalize_distribution_label=True)
-            c1.habitat_type = self.rng.choice(self.habitat_types)
+            if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
+                c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
             lineage_localities = []
             for island in self.islands:
                 for habitat in island.habitat_list:
