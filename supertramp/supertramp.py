@@ -607,16 +607,23 @@ def main():
             default=0.01,
             type=float,
             help="Lineage death rate (default = %(default)s).")
-    simulation_param_options.add_argument("-y", "--niche-evolution-rate",
+    simulation_param_options.add_argument("-y", "--niche-evolution-probability",
             default=0.01,
             type=float,
-            help="Lineage niche evolution rate (default = %(default)s).")
+            help="Lineage (post-splitting) niche evolution probability (default = %(default)s).")
     simulation_param_options.add_argument("-D", "--dispersal-rate",
             default=0.01,
             type=float,
             help="Dispersal rate (default = %(default)s).")
     args = parser.parse_args()
-    sys = System(random_seed=args.random_seed)
+    sys = System(
+            dispersal_model="unconstrained",
+            random_seed=args.random_seed,
+            global_lineage_birth_rate=args.birth_rate,
+            global_lineage_death_rate=args.death_rate,
+            global_lineage_niche_evolution_probability=args.niche_evolution_probability,
+            global_dispersal_rate=args.dispersal_rate,
+            log_frequency=args.log_frequency)
     sys.bootstrap()
     for x in range(args.ngens):
         sys.execute_life_cycle()
