@@ -563,25 +563,53 @@ class System(object):
     def run_diversification(self):
         tips = self.phylogeny.leaf_nodes()
         if self.rng.uniform(0, 1) <= self.global_lineage_birth_rate * len(tips):
-            diversifying_lineage = self.rng.choice(tips)
-            c0, c1 = diversifying_lineage.diversify(finalize_distribution_label=True)
-            if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
-                c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
-            lineage_localities = []
-            for island in self.islands:
-                for habitat in island.habitat_list:
-                    if diversifying_lineage in habitat.lineages:
-                        lineage_localities.append(habitat)
+            splitting_lineage = self.rng.choice(tips)
+            self.run_birth(splitting_lineage=splitting_lineage)
+        tips = self.phylogeny.leaf_nodes()
+        if self.rng.uniform(0, 1) <= self.global_lineage_birth_rate * len(tips):
+            extinguishing_lineage = self.rng.choice(tips)
+            self.run_death(extinguishing_lineage=extinguishing_lineage)
+
+    def run_birth(self, splitting_lineage):
+        c0, c1 = splitting_lineage.diversify(finalize_distribution_label=True)
+        if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
+            c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
+        lineage_localities = []
+        for island in self.islands:
+            for habitat in island.habitat_list:
+                if splitting_lineage in habitat.lineages:
+                    lineage_localities.append(habitat)
+        if len(lineage_localities) == 0:
+            print(self.phylogeny.as_newick_string())
+            exit(0)
+        elif len(lineage_localities) == 1:
+            target = lineage_localities[0]
+        else:
             target = self.rng.choice(lineage_localities)
-            for habitat in lineage_localities:
-                habitat.remove_lineage(diversifying_lineage)
-                if habitat is target:
-                    # sympatric speciation: "old" species retained in original habitat on island
-                    # new species added to new habitat on island
-                    habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
-                    habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
-                else:
-                    habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+        for habitat in lineage_localities:
+            habitat.remove_lineage(splitting_lineage)
+            if habitat is target:
+                # sympatric speciation: "old" species retained in original habitat on island
+                # new species added to new habitat on island
+                habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+                habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
+            else:
+                habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+
+    def run_death(self, extinguishing_lineage):
+        lineage_localities = []
+        for island in self.islands:
+            for habitat in island.habitat_list:
+                if extinguishing_lineage in habitat.lineages:
+                    lineage_localities.append(habitat)
+        if len(lineage_localities) == 0:
+            print(self.phylogeny.as_newick_string())
+            exit(0)
+        elif len(lineage_localities) == 1:
+            target = lineage_localities[0]
+        else:
+            target = self.rng.choice(lineage_localities)
+        target.remove_lineage(extinguishing_lineage)
 
 def main():
     parser = argparse.ArgumentParser(description="Biogeographical simulator")
@@ -604,7 +632,7 @@ def main():
             type=float,
             help="Lineage birth rate (default = %(default)s).")
     simulation_param_options.add_argument("-d", "--death-rate",
-            default=0.01,
+            default=0.00,
             type=float,
             help="Lineage death rate (default = %(default)s).")
     simulation_param_options.add_argument("-y", "--niche-evolution-probability",
@@ -616,7 +644,7 @@ def main():
             type=float,
             help="Dispersal rate (default = %(default)s).")
     args = parser.parse_args()
-    sys = System(
+    supertramp_system = System(
             dispersal_model="unconstrained",
             random_seed=args.random_seed,
             global_lineage_birth_rate=args.birth_rate,
@@ -624,10 +652,10 @@ def main():
             global_lineage_niche_evolution_probability=args.niche_evolution_probability,
             global_dispersal_rate=args.dispersal_rate,
             log_frequency=args.log_frequency)
-    sys.bootstrap()
+    supertramp_system.bootstrap()
     for x in range(args.ngens):
-        sys.execute_life_cycle()
-    print(sys.phylogeny.as_newick_string())
+        supertramp_system.execute_life_cycle()
+    print(supertramp_system.phylogeny.as_newick_string())
 
 if __name__ == "__main__":
     main()
