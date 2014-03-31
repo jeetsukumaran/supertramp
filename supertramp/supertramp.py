@@ -88,7 +88,6 @@ def weighted_index_choice(weights, rng=None):
         if rnd < 0:
             return i
 
-
 class RunLogger(object):
 
     def __init__(self, **kwargs):
@@ -468,27 +467,36 @@ class Lineage(object):
 
 class System(object):
 
-    def __init__(self, random_seed=None):
+    def __init__(self,
+            dispersal_model="unconstrained",
+            random_seed=None,
+            global_lineage_birth_rate=0.01,
+            global_lineage_death_rate=0.01,
+            global_lineage_niche_evolution_rate=0.01,
+            global_dispersal_rate=0.01,
+            log_frequency=100
+            ):
         self.logger = RunLogger(name="supertramp")
         if random_seed is None:
             self.random_seed = random.randint(0, sys.maxsize)
         else:
             self.random_seed = random_seed
-        self.log_frequency = 1
+        self.log_frequency = log_frequency
         self.current_gen = 0
         self.logger.info("Initializing with random seed {}".format(self.random_seed))
         self.rng = numpy.random.RandomState(seed=[self.random_seed])
 
         self.island_labels = ["A", "B", "C", "D"]
         self.habitat_type_labels = ["coastal", "interior", "deep"]
-        self.dispersal_model = "unconstrained"
+        self.dispersal_model = dispersal_model
         self.habitat_types = []
         self.islands = []
         self.phylogeny = None
 
-        self.global_dispersal_rate = 0.01
-        self.global_lineage_birth_rate = 0.01
-        self.global_lineage_death_rate = 0.01
+        self.global_lineage_birth_rate = global_lineage_birth_rate
+        self.global_lineage_death_rate = global_lineage_death_rate
+        self.global_lineage_niche_evolution_rate = global_lineage_niche_evolution_rate
+        self.global_dispersal_rate = global_dispersal_rate
 
     def bootstrap(self):
 
@@ -579,11 +587,33 @@ def main():
 
     parser.add_argument("ngens",
             type=int,
-            default=1000,
+            default=10000,
             help="Number of generations to run (default = %(default)s).")
-    parser.add_argument("-z", "--random-seed",
+    run_options = parser.add_argument_group("Run Options")
+    run_options.add_argument("-z", "--random-seed",
             default=None,
             help="Seed for random number generator engine.")
+    run_options.add_argument("-g", "--log-frequency",
+            default=100,
+            type=int,
+            help="Frequency that background progress messages get written to the log (default = %(default)s).")
+    simulation_param_options = parser.add_argument_group("Simulation Parameters")
+    simulation_param_options.add_argument("-b", "--birth-rate",
+            default=0.01,
+            type=float,
+            help="Lineage birth rate (default = %(default)s).")
+    simulation_param_options.add_argument("-d", "--death-rate",
+            default=0.01,
+            type=float,
+            help="Lineage death rate (default = %(default)s).")
+    simulation_param_options.add_argument("-y", "--niche-evolution-rate",
+            default=0.01,
+            type=float,
+            help="Lineage niche evolution rate (default = %(default)s).")
+    simulation_param_options.add_argument("-D", "--dispersal-rate",
+            default=0.01,
+            type=float,
+            help="Dispersal rate (default = %(default)s).")
     args = parser.parse_args()
     sys = System(random_seed=args.random_seed)
     sys.bootstrap()
