@@ -1,5 +1,4 @@
 #! /usr/bin/env python
-output_prefix=None,
 
 ##############################################################################
 ##
@@ -32,7 +31,10 @@ output_prefix=None,
 ##
 ##############################################################################
 
-import io
+try:
+    from StringIO import StringIO # Python 2 legacy support: StringIO in this module is the one needed (not io)
+except ImportError:
+    from io import StringIO # Python 3
 import sys
 import argparse
 import random
@@ -344,10 +346,9 @@ class Lineage(dendropy.Node):
     def __init__(self,
             habitat_type=None,
             system=None):
-        # dendropy.Node.__init__(self)
-        super(Lineage, self).__init__()
         self.index = self.__class__.counter
         self.__class__.counter += 1
+        super(Lineage, self).__init__()
         self.habitat_type = habitat_type
         self.system = system
         self.habitat_types = None
@@ -381,6 +382,9 @@ class Lineage(dendropy.Node):
 
     def _get_label(self):
         return "S{:d}.{}".format(self.index, self.distribution_label)
+    def _set_label(self, v):
+        self._label = v
+    label = property(_get_label, _set_label)
 
     @property
     def distribution_label(self):
@@ -406,13 +410,15 @@ class Lineage(dendropy.Node):
         Returns tuple consisting of these two lineages.
         """
         if self._child_nodes:
-            raise Exception("Trying to diversify internal node: {}: {}".format(self.label, ", ".join(c.label for c in self.child_nodes)))
+            raise Exception("Trying to diversify internal node: {}: {}".format(self.label, ", ".join(c.label for c in self._child_nodes)))
         if finalize_distribution_label:
             self.final_distribution_label = self.distribution_label
         c1 = Lineage(habitat_type=self.habitat_type, system=self.system)
         c2 = Lineage(habitat_type=self.habitat_type, system=self.system)
         self.add_child(c1)
         self.add_child(c2)
+        assert c1.parent_node is self
+        assert c2.parent_node is self
         return (c1, c2)
 
 class Phylogeny(dendropy.Tree):
@@ -566,18 +572,13 @@ class System(object):
             splitting_lineage = self.rng.choice(tips)
             self.run_birth(splitting_lineage=splitting_lineage)
         tips = self.phylogeny.leaf_nodes()
-        self.logger.info("{}: Before killing: {}".format(self.current_gen, len(tips)))
-        if len(tips) > 100:
+        if self.rng.uniform(0, 1) <= self.global_lineage_death_rate * len(tips):
             extinguishing_lineage = self.rng.choice(tips)
             self.run_death(extinguishing_lineage=extinguishing_lineage)
-        tips = self.phylogeny.leaf_nodes()
-        self.logger.info("{}: After killing: {}".format(self.current_gen, len(tips)))
-        # if self.rng.uniform(0, 1) <= self.global_lineage_death_rate * len(tips):
-        #     extinguishing_lineage = self.rng.choice(tips)
-        #     self.run_death(extinguishing_lineage=extinguishing_lineage)
 
     def run_birth(self, splitting_lineage):
         c0, c1 = splitting_lineage.diversify(finalize_distribution_label=True)
+        self.phylogeny._debug_check_tree()
         if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
             c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
         lineage_localities = []
@@ -602,7 +603,6 @@ class System(object):
                 habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
 
     def run_death(self, extinguishing_lineage):
-        self.logger.info("Killing {}".format(extinguishing_lineage))
         lineage_localities = []
         for island in self.islands:
             for habitat in island.habitat_list:
@@ -610,20 +610,18 @@ class System(object):
                     lineage_localities.append(habitat)
         for loc in lineage_localities:
             loc.remove_lineage(extinguishing_lineage)
-        extinguishing_lineage.drop()
-        # if len(lineage_localities) == 0:
-        #     raise TotalExtinctionException()
-        # elif len(lineage_localities) == 1:
-        #     target = lineage_localities[0]
-        # else:
-        #     target = self.rng.choice(lineage_localities)
-        # target.remove_lineage(extinguishing_lineage)
+        if extinguishing_lineage is self.phylogeny.seed_node:
+            raise TotalExtinctionException()
+        else:
+            self.phylogeny.prune_subtree(node=extinguishing_lineage,
+                    update_splits=False, delete_outdegree_one=True)
+            if self.phylogeny.seed_node.num_child_nodes() == 0:
+                raise TotalExtinctionException()
 
     def report(self):
         # report_prefix = self.output_prefix + ".T{:08}d".format(self.current_gen)
-        self.tree_log.write(self.phylogeny.as_newick_string())
+        self.tree_log.write(self.phylogeny._as_newick_string())
         self.tree_log.flush()
-
 
 def main():
     parser = argparse.ArgumentParser(description="Biogeographical simulator")
@@ -646,11 +644,11 @@ def main():
             type=float,
             help="Lineage birth rate (default = %(default)s).")
     simulation_param_options.add_argument("-d", "--death-rate",
-            default=0.000000001,
+            default=0.01,
             type=float,
             help="Lineage death rate (default = %(default)s).")
     simulation_param_options.add_argument("-y", "--niche-evolution-probability",
-            default=0.01,
+            default=0.00,
             type=float,
             help="Lineage (post-splitting) niche evolution probability (default = %(default)s).")
     simulation_param_options.add_argument("-D", "--dispersal-rate",
@@ -702,7 +700,6 @@ def main():
                 success = supertramp_system.run(args.ngens)
             except TotalExtinctionException:
                 logger.info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, args.num_reps, supertramp_system.current_gen))
-                raise
                 logger.info("Run {} of {}: restarting".format(rep+1, args.num_reps))
             else:
                 logger.info("Run {} of {}: completed to termination condition".format(rep+1, args.num_reps))
