@@ -449,6 +449,13 @@ class Lineage(object):
     def leaf_nodes(self):
         return list(nd for nd in self.leaf_iter())
 
+    def drop(self):
+        if self.child_nodes:
+            raise TypeError("Cannot drop an internal node")
+        if self.parent_node is None:
+            raise TotalExtinctionException()
+        self.parent_node.child_nodes.remove(self)
+
     ###########################################################################
     ## Hacked-in NEWICK representation.
 
@@ -471,6 +478,12 @@ class Lineage(object):
         method of the object.
         """
         child_nodes = self.child_nodes
+        if len(child_nodes) == 1:
+            # outdegree-one node: skip over
+            child_nodes[0].age += self.age
+            child_nodes[0].write_newick(out, **kwargs)
+            self.age = 0
+            return
         if child_nodes:
             out.write('(')
             f_child = child_nodes[0]
@@ -617,15 +630,15 @@ class System(object):
 
     def run_diversification(self):
         tips = self.phylogeny.leaf_nodes()
-        if len(tips) < 2:
+        if not tips:
             raise TotalExtinctionException()
         if self.rng.uniform(0, 1) <= self.global_lineage_birth_rate * len(tips):
             splitting_lineage = self.rng.choice(tips)
             self.run_birth(splitting_lineage=splitting_lineage)
-        tips = self.phylogeny.leaf_nodes()
-        if self.rng.uniform(0, 1) <= self.global_lineage_death_rate * len(tips):
-            extinguishing_lineage = self.rng.choice(tips)
-            self.run_death(extinguishing_lineage=extinguishing_lineage)
+        # tips = self.phylogeny.leaf_nodes()
+        # if self.rng.uniform(0, 1) <= self.global_lineage_death_rate * len(tips):
+        #     extinguishing_lineage = self.rng.choice(tips)
+        #     self.run_death(extinguishing_lineage=extinguishing_lineage)
 
     def run_birth(self, splitting_lineage):
         c0, c1 = splitting_lineage.diversify(finalize_distribution_label=True)
@@ -669,6 +682,7 @@ class System(object):
     def report(self):
         # report_prefix = self.output_prefix + ".T{:08}d".format(self.current_gen)
         self.tree_log.write(self.phylogeny.as_newick_string())
+        self.tree_log.flush()
 
 
 def main():
@@ -746,11 +760,14 @@ def main():
         while not success:
             try:
                 success = supertramp_system.run(args.ngens)
-            except TotalExtinctionException:
-                logger.info("Run {} of {}: total extinction of all lineages before termination condition: re-running".format(rep+1, args.num_reps))
-            logger.info("Run {} of {}: completed to termination condition".format(rep+1, args.num_reps))
-            supertramp_system.report()
-
+            except IOError:
+                logger.info("Run {} of {}: total extinction of all lineages before termination condition".format(rep+1, args.num_reps))
+                logger.info("Run {} of {}: restarting".format(rep+1, args.num_reps))
+            else:
+                logger.info("Run {} of {}: completed to termination condition".format(rep+1, args.num_reps))
+                supertramp_system.report()
+                break
+        rep += 1
 
 if __name__ == "__main__":
     main()
