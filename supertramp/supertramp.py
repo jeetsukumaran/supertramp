@@ -41,6 +41,7 @@ import collections
 import numpy
 import inspect
 from BitVector import BitVector
+import dendropy
 
 _LOGGING_LEVEL_ENVAR = "SUPERTRAMP_LOGGING_LEVEL"
 _LOGGING_FORMAT_ENVAR = "SUPERTRAMP_LOGGING_FORMAT"
@@ -332,7 +333,7 @@ class Island(object):
         assert lineage.habitat_type is habitat_type
         self.habitats_by_type[habitat_type].add_lineage(lineage)
 
-class Lineage(object):
+class Lineage(dendropy.Node):
 
     counter = 0
 
@@ -341,24 +342,32 @@ class Lineage(object):
     reset_counter = classmethod(reset_counter)
 
     def __init__(self,
-            parent,
-            habitat_type,
-            system):
+            habitat_type=None,
+            system=None):
+        # dendropy.Node.__init__(self)
+        super(Lineage, self).__init__()
         self.index = self.__class__.counter
         self.__class__.counter += 1
-        self.age = 0
-        self.parent = parent
         self.habitat_type = habitat_type
         self.system = system
-        self.child_nodes = []
+        self.habitat_types = None
+        self.island_localities = None
+        self.habitats = None
+        self.final_distribution_label = None
+        self.edge.length = 0
+        if self.system is not None:
+            self.bootstrap()
 
+    def bootstrap(self):
         # Note that all islands and habitat types need to be defined for this
         # to work (or at least, the maximum number of habitat types and islands
         # must be known.
+        assert self.habitat_types is None
+        assert self.island_localities is None
+        assert self.habitats is None
         self.habitat_types = BitVector(size=self.system.num_habitat_types)
         self.island_localities = BitVector(size=self.system.num_islands)
         self.habitats = BitVector(size=self.system.num_islands * self.system.num_habitat_types)
-        self.final_distribution_label = None
 
     def register_habitat(self, habitat):
         self.habitats[habitat.index] = 1
@@ -370,8 +379,7 @@ class Lineage(object):
         self.island_localities[habitat.island.index] = 0
         self.habitat_types[habitat.habitat_type.index] = 0
 
-    @property
-    def label(self):
+    def _get_label(self):
         return "S{:d}.{}".format(self.index, self.distribution_label)
 
     @property
@@ -386,114 +394,38 @@ class Lineage(object):
         """
         Grows tree by adding ``ngens`` time unit(s) to all tips.
         """
-        if self.child_nodes:
+        if self._child_nodes:
             for nd in self.leaf_iter():
-                nd.age += 1
+                nd.edge.length += ngens
         else:
-            self.age += 1
-
-    def leaf_iter(self, filter_fn=None):
-        """
-        Returns an iterator over the leaf_nodes that are descendants of self
-        (with leaves returned in same order as a post-order traversal of the
-        tree).
-        """
-        if filter_fn:
-            ff = lambda x: (not x.child_nodes) and filter_fn(x) or None
-        else:
-            ff = lambda x: (not x.child_nodes) and x or None
-        for node in self.postorder_iter(ff):
-            yield node
-
-    def postorder_iter(self, filter_fn=None):
-        """
-        Postorder traversal of the self and its child_nodes.  Returns self
-        and all descendants such that a node's child_nodes (and their
-        child_nodes) are visited before node.  Filtered by filter_fn:
-        node is only returned if no filter_fn is given or if filter_fn
-        returns True.
-        """
-        stack = [(self, False)]
-        while stack:
-            node, state = stack.pop(0)
-            if state:
-                if filter_fn is None or filter_fn(node):
-                    yield node
-            else:
-                stack.insert(0, (node, True))
-                child_nodes = [(n, False) for n in node.child_nodes]
-                child_nodes.extend(stack)
-                stack = child_nodes
+            self.edge.length += ngens
 
     def diversify(self, finalize_distribution_label=True):
         """
         Spawns two child lineages with self as parent.
         Returns tuple consisting of these two lineages.
         """
-        if self.child_nodes:
+        if self._child_nodes:
             raise Exception("Trying to diversify internal node: {}: {}".format(self.label, ", ".join(c.label for c in self.child_nodes)))
         if finalize_distribution_label:
             self.final_distribution_label = self.distribution_label
-        c1 = Lineage(parent=self, habitat_type=self.habitat_type, system=self.system)
-        c2 = Lineage(parent=self, habitat_type=self.habitat_type, system=self.system)
-        self.child_nodes.append(c1)
-        self.child_nodes.append(c2)
+        c1 = Lineage(habitat_type=self.habitat_type, system=self.system)
+        c2 = Lineage(habitat_type=self.habitat_type, system=self.system)
+        self.add_child(c1)
+        self.add_child(c2)
         return (c1, c2)
 
-    def __str__(self):
-        return self.label
+class Phylogeny(dendropy.Tree):
 
-    def __repr__(self):
-        return "<Lineage {}>".format(self.label)
+    def node_factory(cls, **kwargs):
+        return Lineage(**kwargs)
+    node_factory = classmethod(node_factory)
 
-    def leaf_nodes(self):
-        return list(nd for nd in self.leaf_iter())
-
-    def drop(self):
-        if self.child_nodes:
-            raise TypeError("Cannot drop an internal node")
-        if self.parent is None:
-            raise TotalExtinctionException()
-        self.parent.child_nodes.remove(self)
-
-    ###########################################################################
-    ## Hacked-in NEWICK representation.
-
-    def as_newick_string(self, **kwargs):
+    def add_age_to_tips(self, ngens=1):
         """
-        This returns the Node as a NEWICK statement according to the given
-        formatting rules. This should be used for debugging purposes only.
-        For production purposes, use the the full-fledged 'as_string()'
-        method of the object.
+        Grows tree by adding ``ngens`` time unit(s) to all tips.
         """
-        out = io.StringIO()
-        self.write_newick(out, **kwargs)
-        return out.getvalue()
-
-    def write_newick(self, out, **kwargs):
-        """
-        This returns the Node as a NEWICK statement according to the given
-        formatting rules. This should be used for debugging purposes only.  For
-        production purposes, use the the full-fledged 'write_to_stream()'
-        method of the object.
-        """
-        child_nodes = self.child_nodes
-        if len(child_nodes) == 1:
-            # outdegree-one node: skip over
-            child_nodes[0].age += self.age
-            child_nodes[0].write_newick(out, **kwargs)
-            self.age = 0
-            return
-        if child_nodes:
-            out.write('(')
-            f_child = child_nodes[0]
-            for child in child_nodes:
-                if child is not f_child:
-                    out.write(',')
-                child.write_newick(out, **kwargs)
-            out.write(')')
-        out.write(self.label)
-        out.write(":{}".format(self.age))
+        self.seed_node.add_age_to_tips(ngens)
 
 class TotalExtinctionException(Exception):
     def __init__(self, *args, **kwargs):
@@ -596,13 +528,11 @@ class System(object):
 
         # initialize lineages
         self.seed_habitat = self.dispersal_source_habitat_types[0]
-        self.phylogeny = Lineage(
-                parent=None,
-                habitat_type=self.seed_habitat,
-                system=self)
+        seed_node = Lineage(habitat_type=self.seed_habitat, system=self)
+        self.phylogeny = Phylogeny(seed_node=seed_node)
 
         # seed lineage
-        self.islands[0].habitat_list[0].add_lineage(self.phylogeny)
+        self.islands[0].habitat_list[0].add_lineage(self.phylogeny.seed_node)
 
     @property
     def num_islands(self):
