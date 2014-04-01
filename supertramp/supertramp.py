@@ -186,6 +186,10 @@ class HabitatType(object):
 
     counter = 0
 
+    def reset_counter(cls):
+        cls.counter = 0
+    reset_counter = classmethod(reset_counter)
+
     def __init__(self, label):
         self.index = self.__class__.counter
         self.__class__.counter += 1
@@ -197,6 +201,10 @@ class HabitatType(object):
 class Habitat(object):
 
     counter = 0
+
+    def reset_counter(cls):
+        cls.counter = 0
+    reset_counter = classmethod(reset_counter)
 
     def __init__(self, habitat_type, island):
         self.index = self.__class__.counter
@@ -228,6 +236,10 @@ class Habitat(object):
 class Island(object):
 
     counter = 0
+
+    def reset_counter(cls):
+        cls.counter = 0
+    reset_counter = classmethod(reset_counter)
 
     def __init__(self,
             rng,
@@ -322,6 +334,10 @@ class Island(object):
 class Lineage(object):
 
     counter = 0
+
+    def reset_counter(cls):
+        cls.counter = 0
+    reset_counter = classmethod(reset_counter)
 
     def __init__(self,
             parent,
@@ -465,26 +481,38 @@ class Lineage(object):
         out.write(self.label)
         out.write(":{}".format(self.age))
 
+class TotalExtinctionException(Exception):
+    def __init__(self, *args, **kwargs):
+        Exception.__init__(self, *args, **kwargs)
+
 class System(object):
 
     def __init__(self,
             dispersal_model="unconstrained",
-            random_seed=None,
             global_lineage_birth_rate=0.01,
             global_lineage_death_rate=0.01,
             global_lineage_niche_evolution_probability=0.01,
             global_dispersal_rate=0.01,
-            log_frequency=100
+            rng=None,
+            random_seed=None,
+            logger=None,
+            log_frequency=100,
             ):
-        self.logger = RunLogger(name="supertramp")
-        if random_seed is None:
-            self.random_seed = random.randint(0, sys.maxsize)
-        else:
-            self.random_seed = random_seed
         self.log_frequency = log_frequency
         self.current_gen = 0
-        self.logger.info("Initializing with random seed {}".format(self.random_seed))
-        self.rng = numpy.random.RandomState(seed=[self.random_seed])
+        if logger is None:
+            self.logger = RunLogger(name="supertramp")
+        else:
+            self.logger = logger
+        if rng is None:
+            if random_seed is None:
+                self.random_seed = random.randint(0, sys.maxsize)
+            else:
+                self.random_seed = random_seed
+            self.logger.info("Initializing with random seed {}".format(self.random_seed))
+            self.rng = numpy.random.RandomState(seed=[self.random_seed])
+        else:
+            self.rng = rng
 
         self.island_labels = ["A", "B", "C", "D"]
         self.habitat_type_labels = ["coastal", "interior", "deep"]
@@ -498,7 +526,16 @@ class System(object):
         self.global_lineage_niche_evolution_probability = global_lineage_niche_evolution_probability
         self.global_dispersal_rate = global_dispersal_rate
 
+    def reset_system_globals(self):
+        HabitatType.reset_counter()
+        Habitat.reset_counter()
+        Island.reset_counter()
+        Lineage.reset_counter()
+
     def bootstrap(self):
+
+        # reset
+        self.reset_system_globals()
 
         # create habitat types
         for ht_label in self.habitat_type_labels:
@@ -549,6 +586,11 @@ class System(object):
     def num_habitat_types(self):
         return len(self.habitat_types)
 
+    def run(self, ngens, repeat_on_total_extinction=True):
+        for x in range(ngens):
+            self.execute_life_cycle()
+        return True
+
     def execute_life_cycle(self):
         self.current_gen += 1
         self.phylogeny.add_age_to_tips(1)
@@ -562,11 +604,13 @@ class System(object):
 
     def run_diversification(self):
         tips = self.phylogeny.leaf_nodes()
+        if len(tips) < 2:
+            raise TotalExtinctionException()
         if self.rng.uniform(0, 1) <= self.global_lineage_birth_rate * len(tips):
             splitting_lineage = self.rng.choice(tips)
             self.run_birth(splitting_lineage=splitting_lineage)
         tips = self.phylogeny.leaf_nodes()
-        if self.rng.uniform(0, 1) <= self.global_lineage_birth_rate * len(tips):
+        if self.rng.uniform(0, 1) <= self.global_lineage_death_rate * len(tips):
             extinguishing_lineage = self.rng.choice(tips)
             self.run_death(extinguishing_lineage=extinguishing_lineage)
 
@@ -580,8 +624,7 @@ class System(object):
                 if splitting_lineage in habitat.lineages:
                     lineage_localities.append(habitat)
         if len(lineage_localities) == 0:
-            print(self.phylogeny.as_newick_string())
-            exit(0)
+            raise TotalExtinctionException()
         elif len(lineage_localities) == 1:
             target = lineage_localities[0]
         else:
@@ -603,8 +646,7 @@ class System(object):
                 if extinguishing_lineage in habitat.lineages:
                     lineage_localities.append(habitat)
         if len(lineage_localities) == 0:
-            print(self.phylogeny.as_newick_string())
-            exit(0)
+            raise TotalExtinctionException()
         elif len(lineage_localities) == 1:
             target = lineage_localities[0]
         else:
@@ -614,14 +656,14 @@ class System(object):
 def main():
     parser = argparse.ArgumentParser(description="Biogeographical simulator")
 
-    parser.add_argument("ngens",
-            type=int,
-            default=10000,
-            help="Number of generations to run (default = %(default)s).")
     run_options = parser.add_argument_group("Run Options")
     run_options.add_argument("-z", "--random-seed",
             default=None,
             help="Seed for random number generator engine.")
+    run_options.add_argument("-n", "--num-reps",
+            type=int,
+            default=1,
+            help="Number of replicates (default = %(default)s).")
     run_options.add_argument("-g", "--log-frequency",
             default=100,
             type=int,
@@ -632,7 +674,7 @@ def main():
             type=float,
             help="Lineage birth rate (default = %(default)s).")
     simulation_param_options.add_argument("-d", "--death-rate",
-            default=0.00,
+            default=0.01,
             type=float,
             help="Lineage death rate (default = %(default)s).")
     simulation_param_options.add_argument("-y", "--niche-evolution-probability",
@@ -643,19 +685,48 @@ def main():
             default=0.01,
             type=float,
             help="Dispersal rate (default = %(default)s).")
+    termination_condition_options = parser.add_argument_group("Termination Condition Options")
+    termination_condition_options.add_argument("--ngens",
+            type=int,
+            default=10000,
+            help="Number of generations to run (default = %(default)s).")
+    output_options = parser.add_argument_group("Output Options")
+    output_options.add_argument('-o', '--output-prefix',
+        action='store',
+        dest='output_prefix',
+        type=str,
+        default='supertramp_run',
+        metavar='OUTPUT-FILE-PREFIX',
+        help="Prefix for output files (default='%(default)s').")
     args = parser.parse_args()
-    supertramp_system = System(
-            dispersal_model="unconstrained",
-            random_seed=args.random_seed,
-            global_lineage_birth_rate=args.birth_rate,
-            global_lineage_death_rate=args.death_rate,
-            global_lineage_niche_evolution_probability=args.niche_evolution_probability,
-            global_dispersal_rate=args.dispersal_rate,
-            log_frequency=args.log_frequency)
-    supertramp_system.bootstrap()
-    for x in range(args.ngens):
-        supertramp_system.execute_life_cycle()
-    print(supertramp_system.phylogeny.as_newick_string())
+
+    logger = RunLogger(name="supertramp")
+    if args.random_seed is None:
+        args.random_seed = random.randint(0, sys.maxsize)
+    logger.info("Initializing with random seed: {}".format(args.random_seed))
+    rng = numpy.random.RandomState(seed=[args.random_seed])
+    rep = 0
+    while rep < args.num_reps:
+        logger.info("Run {} of {}: starting".format(rep+1, args.num_reps))
+        supertramp_system = System(
+                dispersal_model="unconstrained",
+                random_seed=args.random_seed,
+                global_lineage_birth_rate=args.birth_rate,
+                global_lineage_death_rate=args.death_rate,
+                global_lineage_niche_evolution_probability=args.niche_evolution_probability,
+                global_dispersal_rate=args.dispersal_rate,
+                rng=rng,
+                logger=logger,
+                log_frequency=args.log_frequency)
+        supertramp_system.bootstrap()
+        success = False
+        while not success:
+            try:
+                success = supertramp_system.run(args.ngens)
+            except TotalExtinctionException:
+                logger.info("Run {} of {}: total extinction of all lineages before termination condition: re-running".format(rep+1, args.num_reps))
+        logger.info("Run {} of {}: completed to termination condition".format(rep+1, args.num_reps))
+        print(supertramp_system.phylogeny.as_newick_string())
 
 if __name__ == "__main__":
     main()
