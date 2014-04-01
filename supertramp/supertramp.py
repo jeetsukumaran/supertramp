@@ -452,9 +452,9 @@ class Lineage(object):
     def drop(self):
         if self.child_nodes:
             raise TypeError("Cannot drop an internal node")
-        if self.parent_node is None:
+        if self.parent is None:
             raise TotalExtinctionException()
-        self.parent_node.child_nodes.remove(self)
+        self.parent.child_nodes.remove(self)
 
     ###########################################################################
     ## Hacked-in NEWICK representation.
@@ -635,7 +635,13 @@ class System(object):
         if self.rng.uniform(0, 1) <= self.global_lineage_birth_rate * len(tips):
             splitting_lineage = self.rng.choice(tips)
             self.run_birth(splitting_lineage=splitting_lineage)
-        # tips = self.phylogeny.leaf_nodes()
+        tips = self.phylogeny.leaf_nodes()
+        self.logger.info("{}: Before killing: {}".format(self.current_gen, len(tips)))
+        if len(tips) > 100:
+            extinguishing_lineage = self.rng.choice(tips)
+            self.run_death(extinguishing_lineage=extinguishing_lineage)
+        tips = self.phylogeny.leaf_nodes()
+        self.logger.info("{}: After killing: {}".format(self.current_gen, len(tips)))
         # if self.rng.uniform(0, 1) <= self.global_lineage_death_rate * len(tips):
         #     extinguishing_lineage = self.rng.choice(tips)
         #     self.run_death(extinguishing_lineage=extinguishing_lineage)
@@ -666,18 +672,22 @@ class System(object):
                 habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
 
     def run_death(self, extinguishing_lineage):
+        self.logger.info("Killing {}".format(extinguishing_lineage))
         lineage_localities = []
         for island in self.islands:
             for habitat in island.habitat_list:
                 if extinguishing_lineage in habitat.lineages:
                     lineage_localities.append(habitat)
-        if len(lineage_localities) == 0:
-            raise TotalExtinctionException()
-        elif len(lineage_localities) == 1:
-            target = lineage_localities[0]
-        else:
-            target = self.rng.choice(lineage_localities)
-        target.remove_lineage(extinguishing_lineage)
+        for loc in lineage_localities:
+            loc.remove_lineage(extinguishing_lineage)
+        extinguishing_lineage.drop()
+        # if len(lineage_localities) == 0:
+        #     raise TotalExtinctionException()
+        # elif len(lineage_localities) == 1:
+        #     target = lineage_localities[0]
+        # else:
+        #     target = self.rng.choice(lineage_localities)
+        # target.remove_lineage(extinguishing_lineage)
 
     def report(self):
         # report_prefix = self.output_prefix + ".T{:08}d".format(self.current_gen)
@@ -706,7 +716,7 @@ def main():
             type=float,
             help="Lineage birth rate (default = %(default)s).")
     simulation_param_options.add_argument("-d", "--death-rate",
-            default=0.01,
+            default=0.000000001,
             type=float,
             help="Lineage death rate (default = %(default)s).")
     simulation_param_options.add_argument("-y", "--niche-evolution-probability",
@@ -760,8 +770,9 @@ def main():
         while not success:
             try:
                 success = supertramp_system.run(args.ngens)
-            except IOError:
-                logger.info("Run {} of {}: total extinction of all lineages before termination condition".format(rep+1, args.num_reps))
+            except TotalExtinctionException:
+                logger.info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, args.num_reps, supertramp_system.current_gen))
+                raise
                 logger.info("Run {} of {}: restarting".format(rep+1, args.num_reps))
             else:
                 logger.info("Run {} of {}: completed to termination condition".format(rep+1, args.num_reps))
