@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+output_prefix=None,
 
 ##############################################################################
 ##
@@ -494,16 +495,25 @@ class System(object):
             global_lineage_niche_evolution_probability=0.01,
             global_dispersal_rate=0.01,
             rng=None,
+            output_prefix=None,
+            tree_log=None,
             random_seed=None,
             logger=None,
             log_frequency=100,
             ):
-        self.log_frequency = log_frequency
-        self.current_gen = 0
+        if output_prefix is None:
+            self.output_prefix = "supertramp"
+        else:
+            self.output_prefix = output_prefix
         if logger is None:
-            self.logger = RunLogger(name="supertramp")
+            self.logger = RunLogger(name="supertramp",
+                    log_path=self.output_prefix + ".log")
         else:
             self.logger = logger
+        if tree_log is None:
+            self.tree_log = open(self.output_prefix + ".trees", "w")
+        else:
+            self.tree_log = tree_log
         if rng is None:
             if random_seed is None:
                 self.random_seed = random.randint(0, sys.maxsize)
@@ -525,6 +535,9 @@ class System(object):
         self.global_lineage_death_rate = global_lineage_death_rate
         self.global_lineage_niche_evolution_probability = global_lineage_niche_evolution_probability
         self.global_dispersal_rate = global_dispersal_rate
+
+        self.current_gen = 0
+        self.log_frequency = log_frequency
 
     def reset_system_globals(self):
         HabitatType.reset_counter()
@@ -653,6 +666,11 @@ class System(object):
             target = self.rng.choice(lineage_localities)
         target.remove_lineage(extinguishing_lineage)
 
+    def report(self):
+        # report_prefix = self.output_prefix + ".T{:08}d".format(self.current_gen)
+        self.tree_log.write(self.phylogeny.as_newick_string())
+
+
 def main():
     parser = argparse.ArgumentParser(description="Biogeographical simulator")
 
@@ -700,13 +718,16 @@ def main():
         help="Prefix for output files (default='%(default)s').")
     args = parser.parse_args()
 
-    logger = RunLogger(name="supertramp")
+    logger = RunLogger(name="supertramp",
+            log_path=args.output_prefix + ".log")
     if args.random_seed is None:
         args.random_seed = random.randint(0, sys.maxsize)
     logger.info("Initializing with random seed: {}".format(args.random_seed))
     rng = numpy.random.RandomState(seed=[args.random_seed])
     rep = 0
+    tree_log = open(args.output_prefix + ".trees", "w")
     while rep < args.num_reps:
+        run_output_prefix = "{}.R{:04d}".format(args.output_prefix, rep+1)
         logger.info("Run {} of {}: starting".format(rep+1, args.num_reps))
         supertramp_system = System(
                 dispersal_model="unconstrained",
@@ -716,6 +737,8 @@ def main():
                 global_lineage_niche_evolution_probability=args.niche_evolution_probability,
                 global_dispersal_rate=args.dispersal_rate,
                 rng=rng,
+                output_prefix=run_output_prefix,
+                tree_log=tree_log,
                 logger=logger,
                 log_frequency=args.log_frequency)
         supertramp_system.bootstrap()
@@ -725,8 +748,9 @@ def main():
                 success = supertramp_system.run(args.ngens)
             except TotalExtinctionException:
                 logger.info("Run {} of {}: total extinction of all lineages before termination condition: re-running".format(rep+1, args.num_reps))
-        logger.info("Run {} of {}: completed to termination condition".format(rep+1, args.num_reps))
-        print(supertramp_system.phylogeny.as_newick_string())
+            logger.info("Run {} of {}: completed to termination condition".format(rep+1, args.num_reps))
+            supertramp_system.report()
+
 
 if __name__ == "__main__":
     main()
