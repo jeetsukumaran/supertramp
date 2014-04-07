@@ -217,7 +217,7 @@ class Habitat(object):
         self.index = self.__class__.counter
         self.__class__.counter += 1
         self.habitat_type = habitat_type
-        self.carrying_capacity = None
+        self.carrying_capacity = carrying_capacity
         self.island = island
         self.lineages = set()
         self.migrants = set()
@@ -457,9 +457,9 @@ class System(object):
     def __init__(self,
             dispersal_model="unconstrained",
             global_per_lineage_birth_prob=0.01,
-            disable_carrying_capacity_birth_probability_weight=False,
+            disable_density_dependent_birth_probability_weight=False,
             global_per_lineage_death_prob=0.01,
-            disable_carrying_capacity_death_probability_weight=False,
+            disable_density_dependent_death_probability_weight=False,
             global_lineage_niche_evolution_probability=0.01,
             global_dispersal_rate=0.01,
             rng=None,
@@ -501,9 +501,11 @@ class System(object):
         self.phylogeny = None
 
         self.global_per_lineage_birth_prob = global_per_lineage_birth_prob
-        self.disable_carrying_capacity_birth_probability_weight = disable_carrying_capacity_birth_probability_weight
+        self.disable_density_dependent_birth_probability_weight = disable_density_dependent_birth_probability_weight
+        self.single_birth_per_generation = True
         self.global_per_lineage_death_prob = global_per_lineage_death_prob
-        self.disable_carrying_capacity_death_probability_weight = disable_carrying_capacity_death_probability_weight
+        self.single_death_per_generation = True
+        self.disable_density_dependent_death_probability_weight = disable_density_dependent_death_probability_weight
         self.global_lineage_niche_evolution_probability = global_lineage_niche_evolution_probability
         self.global_dispersal_rate = global_dispersal_rate
 
@@ -587,10 +589,14 @@ class System(object):
         self.run_diversification()
 
     def run_diversification(self):
-        if self.disable_carrying_capacity_birth_probability_weight:
+        if self.disable_density_dependent_birth_probability_weight:
             self.run_simple_birth()
-        if self.disable_carrying_capacity_death_probability_weight:
+        else:
+            self.run_density_dependent_birth()
+        if self.disable_density_dependent_death_probability_weight:
             self.run_simple_death()
+        else:
+            self.run_density_dependent_death()
 
     def run_simple_birth(self):
         tips = self.phylogeny.leaf_nodes()
@@ -598,23 +604,24 @@ class System(object):
             raise TotalExtinctionException()
         if self.rng.uniform(0, 1) > self.global_per_lineage_birth_prob * len(tips):
             return
-        splitting_lineage = self.rng.choice(tips)
+        lineage_localities = collections.defaultdict(list)
+        for island in self.islands:
+            for habitat in island.habitat_list:
+                for lineage in habitat.lineages:
+                    lineage_localities[lineage].append(habitat)
+        splitting_lineage = self.rng.choice(list(lineage_localities.keys()))
         c0, c1 = splitting_lineage.diversify(finalize_distribution_label=True)
         self.phylogeny._debug_check_tree()
         if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
             c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
-        lineage_localities = []
-        for island in self.islands:
-            for habitat in island.habitat_list:
-                if splitting_lineage in habitat.lineages:
-                    lineage_localities.append(habitat)
-        if len(lineage_localities) == 0:
-            raise TotalExtinctionException()
-        elif len(lineage_localities) == 1:
-            target = lineage_localities[0]
+
+        splitting_lineage_localities = lineage_localities[splitting_lineage]
+        assert splitting_lineage_localities
+        if len(splitting_lineage_localities) == 1:
+            target = splitting_lineage_localities[0]
         else:
-            target = self.rng.choice(lineage_localities)
-        for habitat in lineage_localities:
+            target = self.rng.choice(splitting_lineage_localities)
+        for habitat in splitting_lineage_localities:
             habitat.remove_lineage(splitting_lineage)
             if habitat is target:
                 # sympatric speciation: "old" species retained in original habitat on island
@@ -624,7 +631,10 @@ class System(object):
             else:
                 habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
 
-    def run_death(self):
+    def run_density_dependent_birth(self):
+        self.run_simple_birth() # TODO!!!
+
+    def run_simple_death(self):
         tips = self.phylogeny.leaf_nodes()
         if not tips:
             raise TotalExtinctionException()
@@ -645,6 +655,54 @@ class System(object):
                     update_splits=False, delete_outdegree_one=True)
             if self.phylogeny.seed_node.num_child_nodes() == 0:
                 raise TotalExtinctionException()
+
+    def run_density_dependent_death(self):
+        death_occurred = False
+        lineage_counts = collections.Counter()
+        for island in self.islands:
+            for habitat in island.habitat_list:
+                n = len(habitat.lineages)
+                if n <= 0:
+                    continue
+                assert habitat.carrying_capacity is not None
+                K = habitat.carrying_capacity
+                if n > K:
+                    while n > K:
+                        death_occurred = True
+                        lineage = self.rng.choice(list(habitat.lineages))
+                        habitat.remove_lineage(lineage)
+                        n -= 1
+                else:
+                    weight = 1.0 - ((K-n)//K)
+                    prob = self.global_per_lineage_death_prob * weight
+                    # print("n={:2d}, K={:2d}, weight={:8.6f}, prob={:8.6f}".format(n, K, weight, prob))
+                    if self.rng.uniform(0, 1) <= prob:
+                        death_occurred = True
+                        lineage = self.rng.choice(list(habitat.lineages))
+                        habitat.remove_lineage(lineage)
+                lineage_counts.update(habitat.lineages)
+        for lineage in lineage_counts:
+            count = lineage_counts[lineage]
+            # print(lineage, count)
+            if count == 0:
+                if lineage is self.phylogeny.seed_node:
+                    raise TotalExtinctionException()
+                else:
+                    self.phylogeny.prune_subtree(node=lineage,
+                            update_splits=False, delete_outdegree_one=True)
+                    if self.phylogeny.seed_node.num_child_nodes() == 0:
+                        raise TotalExtinctionException()
+            else:
+                found = True
+                for island in self.islands:
+                    for habitat in island.habitat_list:
+                        if lineage in habitat.lineages:
+                            found = True
+                            break
+                    if found:
+                        break
+                assert found, lineage
+
 
     def report(self):
         # report_prefix = self.output_prefix + ".T{:08}d".format(self.current_gen)
@@ -672,8 +730,8 @@ def main():
             default=0.01,
             type=float,
             help="Global per-lineage birth probability (default = %(default)s).")
-    simulation_param_options.add_argument("--fixed-birth-rate", "--disable-carrying-capacity-birth-probability-weight",
-            dest="disable_carrying_capacity_birth_probability_weight",
+    simulation_param_options.add_argument("--fixed-birth-rate", "--disable-density-dependent-birth-probability-weight",
+            dest="disable_density_dependent_birth_probability_weight",
             action="store_true",
             default=False,
             help="Disables lineage birth probability being multiplied by (n-K)/K, "
@@ -682,11 +740,11 @@ def main():
             "habitat.")
     simulation_param_options.add_argument("-d", "--death-probability",
             dest="global_per_lineage_death_prob",
-            default=0.000,
+            default=0.01,
             type=float,
             help="Global per-lineage death probability (default = %(default)s).")
-    simulation_param_options.add_argument("--fixed-death-rate", "--disable-carrying-capacity-death-probability-weight",
-            dest="disable_carrying_capacity_death_probability_weight",
+    simulation_param_options.add_argument("--fixed-death-rate", "--disable-density-dependent-death-probability-weight",
+            dest="disable_density_dependent_death_probability_weight",
             action="store_true",
             default=False,
             help="Disables lineage death probability being multiplied by 1-(n-K)/K, "
@@ -731,9 +789,9 @@ def main():
                 dispersal_model="unconstrained",
                 random_seed=args.random_seed,
                 global_per_lineage_birth_prob=args.global_per_lineage_birth_prob,
-                disable_carrying_capacity_birth_probability_weight=args.disable_carrying_capacity_birth_probability_weight,
+                disable_density_dependent_birth_probability_weight=args.disable_density_dependent_birth_probability_weight,
                 global_per_lineage_death_prob=args.global_per_lineage_death_prob,
-                disable_carrying_capacity_death_probability_weight=args.disable_carrying_capacity_death_probability_weight,
+                disable_density_dependent_death_probability_weight=args.disable_density_dependent_death_probability_weight,
                 global_lineage_niche_evolution_probability=args.niche_evolution_probability,
                 global_dispersal_rate=args.dispersal_rate,
                 rng=rng,
@@ -746,7 +804,7 @@ def main():
         while not success:
             try:
                 success = supertramp_system.run(args.ngens)
-            except TotalExtinctionException:
+            except KeyError: #TotalExtinctionException:
                 logger.info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, args.num_reps, supertramp_system.current_gen))
                 logger.info("Run {} of {}: restarting".format(rep+1, args.num_reps))
             else:
