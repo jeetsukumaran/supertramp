@@ -672,14 +672,14 @@ class System(object):
                         habitat.remove_lineage(lineage)
                         lineage_counts.subtract([lineage])
                         n -= 1
-                # else:
-                #     weight = 1.0 - ((K-n)//K)
-                #     prob = self.global_per_lineage_death_prob * weight
-                #     # print("n={:2d}, K={:2d}, weight={:8.6f}, prob={:8.6f}".format(n, K, weight, prob))
-                #     if self.rng.uniform(0, 1) <= prob:
-                #         lineage = self.rng.choice(list(habitat.lineages))
-                #         habitat.remove_lineage(lineage)
-                #         lineage_counts.subtract([lineage])
+                else:
+                    weight = 1.0 - ((K-n)//K)
+                    prob = self.global_per_lineage_death_prob * weight
+                    # print("n={:2d}, K={:2d}, weight={:8.6f}, prob={:8.6f}".format(n, K, weight, prob))
+                    if self.rng.uniform(0, 1) <= prob:
+                        lineage = self.rng.choice(list(habitat.lineages))
+                        habitat.remove_lineage(lineage)
+                        lineage_counts.subtract([lineage])
         for lineage in lineage_counts:
             count = lineage_counts[lineage]
             if count == 0:
