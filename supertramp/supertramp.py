@@ -657,33 +657,31 @@ class System(object):
                 raise TotalExtinctionException()
 
     def run_density_dependent_death(self):
-        death_occurred = False
         lineage_counts = collections.Counter()
         for island in self.islands:
             for habitat in island.habitat_list:
+                lineage_counts.update(habitat.lineages)
                 n = len(habitat.lineages)
                 if n <= 0:
                     continue
                 assert habitat.carrying_capacity is not None
-                K = habitat.carrying_capacity
+                K = 4 # habitat.carrying_capacity
                 if n > K:
                     while n > K:
-                        death_occurred = True
                         lineage = self.rng.choice(list(habitat.lineages))
                         habitat.remove_lineage(lineage)
+                        lineage_counts.subtract([lineage])
                         n -= 1
-                else:
-                    weight = 1.0 - ((K-n)//K)
-                    prob = self.global_per_lineage_death_prob * weight
-                    # print("n={:2d}, K={:2d}, weight={:8.6f}, prob={:8.6f}".format(n, K, weight, prob))
-                    if self.rng.uniform(0, 1) <= prob:
-                        death_occurred = True
-                        lineage = self.rng.choice(list(habitat.lineages))
-                        habitat.remove_lineage(lineage)
-                lineage_counts.update(habitat.lineages)
+                # else:
+                #     weight = 1.0 - ((K-n)//K)
+                #     prob = self.global_per_lineage_death_prob * weight
+                #     # print("n={:2d}, K={:2d}, weight={:8.6f}, prob={:8.6f}".format(n, K, weight, prob))
+                #     if self.rng.uniform(0, 1) <= prob:
+                #         lineage = self.rng.choice(list(habitat.lineages))
+                #         habitat.remove_lineage(lineage)
+                #         lineage_counts.subtract([lineage])
         for lineage in lineage_counts:
             count = lineage_counts[lineage]
-            # print(lineage, count)
             if count == 0:
                 if lineage is self.phylogeny.seed_node:
                     raise TotalExtinctionException()
