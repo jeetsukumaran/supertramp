@@ -210,10 +210,14 @@ class Habitat(object):
         cls.counter = 0
     reset_counter = classmethod(reset_counter)
 
-    def __init__(self, habitat_type, island):
+    def __init__(self,
+            habitat_type,
+            carrying_capacity,
+            island):
         self.index = self.__class__.counter
         self.__class__.counter += 1
         self.habitat_type = habitat_type
+        self.carrying_capacity = None
         self.island = island
         self.lineages = set()
         self.migrants = set()
@@ -249,6 +253,7 @@ class Island(object):
             rng,
             label,
             habitat_types,
+            habitat_carrying_capacities=None,
             dispersal_rates=None,
             dispersal_source_habitat_types=None):
         self.index = self.__class__.counter
@@ -256,6 +261,13 @@ class Island(object):
         self.rng = rng
         self.label = label
         self.habitat_types = habitat_types
+        if habitat_carrying_capacities is None:
+            self.habitat_carrying_capacities = [None for h in self.habitat_types]
+        else:
+            if len(habitat_carrying_capacities) != len(self.habitat_types):
+                raise ValueError("Require exactly {} carrying capacities, but given {}".format(len(self.habitat_types),
+                    len(habitat_carrying_capacities)))
+            self.habitat_carrying_capacities = habitat_carrying_capacities
         self.habitat_list = []
         self.habitats_by_type = {}
         if dispersal_source_habitat_types is None:
@@ -277,8 +289,11 @@ class Island(object):
             self.compile_dispersal_rates()
 
         # construct habitats
-        for ht in self.habitat_types:
-            h = Habitat(habitat_type=ht, island=self)
+        for ht_idx, ht in enumerate(self.habitat_types):
+            h = Habitat(
+                    habitat_type=ht,
+                    carrying_capacity=self.habitat_carrying_capacities[ht_idx],
+                    island=self)
             self.habitat_list.append(h)
             self.habitats_by_type[ht] = h
             if ht in self.dispersal_source_habitat_types:
@@ -441,8 +456,10 @@ class System(object):
 
     def __init__(self,
             dispersal_model="unconstrained",
-            global_lineage_birth_rate=0.01,
-            global_lineage_death_rate=0.01,
+            global_per_lineage_birth_prob=0.01,
+            disable_carrying_capacity_birth_probability_weight=False,
+            global_per_lineage_death_prob=0.01,
+            disable_carrying_capacity_death_probability_weight=False,
             global_lineage_niche_evolution_probability=0.01,
             global_dispersal_rate=0.01,
             rng=None,
@@ -477,13 +494,16 @@ class System(object):
 
         self.island_labels = ["A", "B", "C", "D"]
         self.habitat_type_labels = ["coastal", "interior", "deep"]
+        self.island_habitat_carrying_capacity = 10
         self.dispersal_model = dispersal_model
         self.habitat_types = []
         self.islands = []
         self.phylogeny = None
 
-        self.global_lineage_birth_rate = global_lineage_birth_rate
-        self.global_lineage_death_rate = global_lineage_death_rate
+        self.global_per_lineage_birth_prob = global_per_lineage_birth_prob
+        self.disable_carrying_capacity_birth_probability_weight = disable_carrying_capacity_birth_probability_weight
+        self.global_per_lineage_death_prob = global_per_lineage_death_prob
+        self.disable_carrying_capacity_death_probability_weight = disable_carrying_capacity_death_probability_weight
         self.global_lineage_niche_evolution_probability = global_lineage_niche_evolution_probability
         self.global_dispersal_rate = global_dispersal_rate
 
@@ -514,11 +534,13 @@ class System(object):
             self.dispersal_source_habitat_types = [self.habitat_types[0]]
 
         # create islands
+        cc = [self.island_habitat_carrying_capacity] * len(self.habitat_types)
         for island_label in self.island_labels:
             island = Island(
                     rng=self.rng,
                     label=island_label,
                     habitat_types=self.habitat_types,
+                    habitat_carrying_capacities=cc,
                     dispersal_source_habitat_types=self.dispersal_source_habitat_types)
             self.islands.append(island)
         self.all_islands_bitmask = (1 << len(self.islands)) - 1
@@ -565,18 +587,18 @@ class System(object):
         self.run_diversification()
 
     def run_diversification(self):
+        if self.disable_carrying_capacity_birth_probability_weight:
+            self.run_simple_birth()
+        if self.disable_carrying_capacity_death_probability_weight:
+            self.run_simple_death()
+
+    def run_simple_birth(self):
         tips = self.phylogeny.leaf_nodes()
         if not tips:
             raise TotalExtinctionException()
-        if self.rng.uniform(0, 1) <= self.global_lineage_birth_rate * len(tips):
-            splitting_lineage = self.rng.choice(tips)
-            self.run_birth(splitting_lineage=splitting_lineage)
-        tips = self.phylogeny.leaf_nodes()
-        if self.rng.uniform(0, 1) <= self.global_lineage_death_rate * len(tips):
-            extinguishing_lineage = self.rng.choice(tips)
-            self.run_death(extinguishing_lineage=extinguishing_lineage)
-
-    def run_birth(self, splitting_lineage):
+        if self.rng.uniform(0, 1) > self.global_per_lineage_birth_prob * len(tips):
+            return
+        splitting_lineage = self.rng.choice(tips)
         c0, c1 = splitting_lineage.diversify(finalize_distribution_label=True)
         self.phylogeny._debug_check_tree()
         if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
@@ -602,7 +624,13 @@ class System(object):
             else:
                 habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
 
-    def run_death(self, extinguishing_lineage):
+    def run_death(self):
+        tips = self.phylogeny.leaf_nodes()
+        if not tips:
+            raise TotalExtinctionException()
+        if self.rng.uniform(0, 1) > self.global_per_lineage_death_prob * len(tips):
+            return
+        extinguishing_lineage = self.rng.choice(tips)
         lineage_localities = []
         for island in self.islands:
             for habitat in island.habitat_list:
@@ -639,14 +667,32 @@ def main():
             type=int,
             help="Frequency that background progress messages get written to the log (default = %(default)s).")
     simulation_param_options = parser.add_argument_group("Simulation Parameters")
-    simulation_param_options.add_argument("-b", "--birth-rate",
+    simulation_param_options.add_argument("-b", "--birth-probability",
+            dest="global_per_lineage_birth_prob",
             default=0.01,
             type=float,
-            help="Lineage birth rate (default = %(default)s).")
-    simulation_param_options.add_argument("-d", "--death-rate",
-            default=0.01,
+            help="Global per-lineage birth probability (default = %(default)s).")
+    simulation_param_options.add_argument("--fixed-birth-rate", "--disable-carrying-capacity-birth-probability-weight",
+            dest="disable_carrying_capacity_birth_probability_weight",
+            action="store_true",
+            default=False,
+            help="Disables lineage birth probability being multiplied by (n-K)/K, "
+            "where 'n' is the number of lineages in the habitat and 'K' is "
+            "the maximum number of lineages (carrying capacity) of the "
+            "habitat.")
+    simulation_param_options.add_argument("-d", "--death-probability",
+            dest="global_per_lineage_death_prob",
+            default=0.000,
             type=float,
-            help="Lineage death rate (default = %(default)s).")
+            help="Global per-lineage death probability (default = %(default)s).")
+    simulation_param_options.add_argument("--fixed-death-rate", "--disable-carrying-capacity-death-probability-weight",
+            dest="disable_carrying_capacity_death_probability_weight",
+            action="store_true",
+            default=False,
+            help="Disables lineage death probability being multiplied by 1-(n-K)/K, "
+            "where 'n' is the number of lineages in the habitat and 'K' is "
+            "the maximum number of lineages (carrying capacity) of the "
+            "habitat.")
     simulation_param_options.add_argument("-y", "--niche-evolution-probability",
             default=0.00,
             type=float,
@@ -684,8 +730,10 @@ def main():
         supertramp_system = System(
                 dispersal_model="unconstrained",
                 random_seed=args.random_seed,
-                global_lineage_birth_rate=args.birth_rate,
-                global_lineage_death_rate=args.death_rate,
+                global_per_lineage_birth_prob=args.global_per_lineage_birth_prob,
+                disable_carrying_capacity_birth_probability_weight=args.disable_carrying_capacity_birth_probability_weight,
+                global_per_lineage_death_prob=args.global_per_lineage_death_prob,
+                disable_carrying_capacity_death_probability_weight=args.disable_carrying_capacity_death_probability_weight,
                 global_lineage_niche_evolution_probability=args.niche_evolution_probability,
                 global_dispersal_rate=args.dispersal_rate,
                 rng=rng,
