@@ -21,11 +21,12 @@ def main():
     Assumptions
     -----------
 
-    Simulation generations:     10000    = 1e6 years
-    Simulation run-time:        1000000  = 1e8 years
-    High speciation rate:       0.001    = 0.1 per MY
-    Med speciation rate:        0.0001   = 0.01 per MY
-    Low speciation rate:        0.00001  = 0.001 per MY
+    1 simulation generation = 100 years
+    10000 simulation generations = 1e6 years
+    Simulation run-time:        1000000 generations    = 1e8 years
+    High speciation rate:       0.001   per generation = 0.1 per MY
+    Med speciation rate:        0.0001  per generation = 0.01 per MY
+    Low speciation rate:        0.00001 per generation = 0.001 per MY
     Dispersal rate:             0.01, 0.5, 1.0, 2.0, 10.0 x speciation rates
     Niche evolution prob:       0.001, 0.01, 0.10, 1.0
     """
@@ -35,7 +36,7 @@ def main():
             help="Seed for random number generator engine.")
     parser.add_argument("--ngens",
             type=int,
-            default=1000000,
+            default=10000000,
             help="Number of generations to run (default = %(default)s).")
     parser.add_argument("--num-reps",
             type=int,

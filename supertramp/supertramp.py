@@ -721,7 +721,7 @@ def main():
             help="Seed for random number generator engine.")
     run_options.add_argument("-n", "--num-reps",
             type=int,
-            default=1,
+            default=10,
             help="number of replicates (default = %(default)s).")
     run_options.add_argument("-g", "--log-frequency",
             default=100,
