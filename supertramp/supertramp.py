@@ -457,9 +457,9 @@ class System(object):
     def __init__(self,
             dispersal_model="unconstrained",
             global_per_lineage_birth_prob=0.01,
-            disable_density_dependent_birth_probability_weight=False,
+            density_dependent_lineage_birth_model=False,
             global_per_lineage_death_prob=0.01,
-            disable_density_dependent_death_probability_weight=False,
+            density_dependent_lineage_death_model=True,
             global_lineage_niche_evolution_probability=0.01,
             global_dispersal_rate=0.01,
             rng=None,
@@ -501,11 +501,11 @@ class System(object):
         self.phylogeny = None
 
         self.global_per_lineage_birth_prob = global_per_lineage_birth_prob
-        self.disable_density_dependent_birth_probability_weight = disable_density_dependent_birth_probability_weight
+        self.density_dependent_lineage_birth_model = density_dependent_lineage_birth_model
         self.single_birth_per_generation = True
         self.global_per_lineage_death_prob = global_per_lineage_death_prob
         self.single_death_per_generation = True
-        self.disable_density_dependent_death_probability_weight = disable_density_dependent_death_probability_weight
+        self.density_dependent_lineage_death_model = density_dependent_lineage_death_model
         self.global_lineage_niche_evolution_probability = global_lineage_niche_evolution_probability
         self.global_dispersal_rate = global_dispersal_rate
 
@@ -589,14 +589,14 @@ class System(object):
         self.run_diversification()
 
     def run_diversification(self):
-        if self.disable_density_dependent_birth_probability_weight:
-            self.run_simple_birth()
-        else:
+        if self.density_dependent_lineage_birth_model:
             self.run_density_dependent_birth()
-        if self.disable_density_dependent_death_probability_weight:
-            self.run_simple_death()
         else:
+            self.run_simple_birth()
+        if self.density_dependent_lineage_death_model:
             self.run_density_dependent_death()
+        else:
+            self.run_simple_death()
 
     def run_simple_birth(self):
         tips = self.phylogeny.leaf_nodes()
@@ -731,27 +731,24 @@ def main():
             default=0.01,
             type=float,
             help="Global per-lineage birth probability (default = %(default)s).")
-    simulation_param_options.add_argument("--fixed-birth-rate", "--disable-density-dependent-birth-probability-weight",
-            dest="disable_density_dependent_birth_probability_weight",
-            action="store_true",
-            default=False,
-            help="Disables lineage birth probability being multiplied by (n-K)/K, "
-            "where 'n' is the number of lineages in the habitat and 'K' is "
-            "the maximum number of lineages (carrying capacity) of the "
-            "habitat.")
     simulation_param_options.add_argument("-d", "--death-probability",
             dest="global_per_lineage_death_prob",
-            default=0.01,
+            default=0.00,
             type=float,
             help="Global per-lineage death probability (default = %(default)s).")
-    simulation_param_options.add_argument("--fixed-death-rate", "--disable-density-dependent-death-probability-weight",
-            dest="disable_density_dependent_death_probability_weight",
-            action="store_true",
-            default=False,
-            help="Disables lineage death probability being multiplied by 1-(n-K)/K, "
-            "where 'n' is the number of lineages in the habitat and 'K' is "
-            "the maximum number of lineages (carrying capacity) of the "
-            "habitat.")
+    simulation_param_options.add_argument("--fixed-death-rate-model", "--disable-density-dependent-lineage-death-model",
+            dest="density_dependent_lineage_death_model",
+            action="store_false",
+            default=True,
+            help="Disables density-dependent lineage extinction model, which is"
+            "active by default. Under this model, once the carrying capacity of"
+            "a habitat is exceeded, lineages will be removed at random until the"
+            "number of lineages equals the carrying capacity, while if the"
+            "carrying capacity of a habitat is not exceeded, lineages will die"
+            "with probability given by the global per-lineage death probability"
+            "multiplied by 1-(n-K)/K, where where 'n' is the number of lineages"
+            "in the habitat and 'K' is the maximum number of lineages (carrying"
+            "capacity) of the habitat.")
     simulation_param_options.add_argument("-y", "--niche-evolution-probability",
             default=0.00,
             type=float,
@@ -783,6 +780,7 @@ def main():
     rng = numpy.random.RandomState(seed=[args.random_seed])
     rep = 0
     tree_log = open(args.output_prefix + ".trees", "w")
+    args.density_dependent_lineage_birth_model = False
     while rep < args.num_reps:
         run_output_prefix = "{}.R{:04d}".format(args.output_prefix, rep+1)
         logger.info("Run {} of {}: starting".format(rep+1, args.num_reps))
@@ -790,9 +788,9 @@ def main():
                 dispersal_model="unconstrained",
                 random_seed=args.random_seed,
                 global_per_lineage_birth_prob=args.global_per_lineage_birth_prob,
-                disable_density_dependent_birth_probability_weight=args.disable_density_dependent_birth_probability_weight,
+                density_dependent_lineage_birth_model=args.density_dependent_lineage_birth_model,
                 global_per_lineage_death_prob=args.global_per_lineage_death_prob,
-                disable_density_dependent_death_probability_weight=args.disable_density_dependent_death_probability_weight,
+                density_dependent_lineage_death_model=args.density_dependent_lineage_death_model,
                 global_lineage_niche_evolution_probability=args.niche_evolution_probability,
                 global_dispersal_rate=args.dispersal_rate,
                 rng=rng,
