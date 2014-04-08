@@ -40,7 +40,6 @@ import argparse
 import random
 import logging
 import collections
-import numpy
 import inspect
 from supertramp.BitVector import BitVector
 import dendropy
@@ -488,7 +487,8 @@ class System(object):
             else:
                 self.random_seed = random_seed
             self.logger.info("Initializing with random seed {}".format(self.random_seed))
-            self.rng = numpy.random.RandomState(seed=[self.random_seed])
+            # self.rng = numpy.random.RandomState(seed=[self.random_seed])
+            self.rng = random.Random(self.random_seed)
         else:
             self.rng = rng
 
@@ -782,7 +782,8 @@ def main():
     if args.random_seed is None:
         args.random_seed = random.randint(0, sys.maxsize)
     logger.info("Initializing with random seed: {}".format(args.random_seed))
-    rng = numpy.random.RandomState(seed=[args.random_seed])
+    # rng = numpy.random.RandomState(seed=[args.random_seed])
+    rng = random.Random(args.random_seed)
     rep = 0
     tree_log = open(args.output_prefix + ".trees", "w")
     args.density_dependent_lineage_birth_model = False

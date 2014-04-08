@@ -55,10 +55,11 @@ def main():
         source_venv = "source {}".format(os.path.abspath(os.path.join(vp, "bin", "activate")))
     else:
         source_venv = ""
-    python_path = "python3"
-    supertramp_path = os.path.abspath(os.path.join(
-            os.path.dirname(__file__),
-            "supertramp-simulate.py"))
+    # python_path = "python3"
+    # supertramp_path = os.path.abspath(os.path.join(
+    #         os.path.dirname(__file__),
+    #         "supertramp-simulate.py"))
+    supertramp_path = "supertramp-simulate.py"
 
     dispersal_models = ["constrained", "unconstrained"]
     # birth_rates = [0.001, 0.0001, 0.00001]
@@ -80,7 +81,6 @@ def main():
                             niche_evolution_prob=niche_evolution_prob)
                     output_prefix = stem + ".run"
                     run_cmd = []
-                    run_cmd.append(python_path)
                     run_cmd.append(supertramp_path)
                     run_cmd.extend(["-z", str(rng.randint(0, sys.maxsize))])
                     run_cmd.extend(["--nreps", str(args.nreps)])
