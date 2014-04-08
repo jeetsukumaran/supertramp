@@ -31,6 +31,9 @@ def main():
     Niche evolution prob:       0.001, 0.01, 0.10, 1.0
     """
     parser = argparse.ArgumentParser()
+    parser.add_argument("--venv",
+            default=None,
+            help="Path to Python virtual environment.")
     parser.add_argument("-z", "--random-seed",
             default=None,
             help="Seed for random number generator engine.")
@@ -38,7 +41,7 @@ def main():
             type=int,
             default=1000000,
             help="Number of generations to run (default = %(default)s).")
-    parser.add_argument("--num-reps",
+    parser.add_argument("--nreps",
             type=int,
             default=10,
             help="number of replicates (default = %(default)s).")
@@ -47,6 +50,11 @@ def main():
     if args.random_seed is None:
         args.random_seed = random.randint(0, sys.maxsize)
     rng = random.Random(args.random_seed)
+    if args.venv is not None:
+        vp = os.path.expanduser(os.path.expandvars(args.venv))
+        source_venv = "source {}".format(os.path.abspath(os.path.join(vp, "bin", "activate")))
+    else:
+        source_venv = ""
     python_path = "python3"
     supertramp_path = os.path.abspath(os.path.join(
             os.path.dirname(__file__),
@@ -70,30 +78,37 @@ def main():
                             birth_rate=birth_rate,
                             dispersal_rate=dispersal_rate,
                             niche_evolution_prob=niche_evolution_prob)
-                    output_prefix = stem + ".results"
-                    command = []
-                    command.append(python_path)
-                    command.append(supertramp_path)
-                    command.extend(["-z", str(rng.randint(0, sys.maxsize))])
-                    command.extend(["--num-reps", str(args.num_reps)])
-                    command.extend(["--log-frequency", "1000"])
-                    command.extend(["--birth-probability", str(birth_rate)])
-                    command.extend(["--death-probability", "0"])
-                    command.extend(["--niche-evolution-probability", str(niche_evolution_prob)])
-                    command.extend(["--dispersal-rate", str(dispersal_rate)])
-                    command.extend(["--ngens", str(args.ngens)])
-                    command.extend(["--output-prefix", output_prefix])
-                    command.append(dispersal_model)
+                    output_prefix = stem + ".run"
+                    run_cmd = []
+                    run_cmd.append(python_path)
+                    run_cmd.append(supertramp_path)
+                    run_cmd.extend(["-z", str(rng.randint(0, sys.maxsize))])
+                    run_cmd.extend(["--nreps", str(args.nreps)])
+                    run_cmd.extend(["--log-frequency", "1000"])
+                    run_cmd.extend(["--birth-probability", str(birth_rate)])
+                    run_cmd.extend(["--death-probability", "0"])
+                    run_cmd.extend(["--niche-evolution-probability", str(niche_evolution_prob)])
+                    run_cmd.extend(["--dispersal-rate", str(dispersal_rate)])
+                    run_cmd.extend(["--ngens", str(args.ngens)])
+                    run_cmd.extend(["--output-prefix", output_prefix])
+                    run_cmd.append(dispersal_model)
+                    run_cmd = " ".join(run_cmd)
+                    commands = []
+                    if source_venv:
+                        commands.append(source_venv)
+                    commands.append(run_cmd)
                     job_filepath = stem + ".job"
                     with open(job_filepath, "w") as jobf:
                         template = kwyjibo_job_template
-                        jobf.write(template.format(commands=" ".join(command)))
+                        jobf.write(template.format(commands="\n".join(commands)))
                     run_manifest[output_prefix] = {
                             "dispersal_model"       : dispersal_model,
                             "birth_rate"            : birth_rate,
                             "dispersal_rate_factor" : dispersal_rate_factor,
                             "dispersal_rate"        : dispersal_rate,
-                            "niche_evolution_prob"  : niche_evolution_prob
+                            "niche_evolution_prob"  : niche_evolution_prob,
+                            "treefile"              : output_prefix + ".trees",
+                            "logfile"              : output_prefix + ".log",
                             }
     with open("run-manifest.json", "w") as manifestf:
         json.dump(run_manifest, manifestf)

@@ -719,7 +719,7 @@ def main():
     run_options.add_argument("-z", "--random-seed",
             default=None,
             help="Seed for random number generator engine.")
-    run_options.add_argument("-n", "--num-reps",
+    run_options.add_argument("-n", "--nreps",
             type=int,
             default=10,
             help="number of replicates (default = %(default)s).")
@@ -786,9 +786,9 @@ def main():
     rep = 0
     tree_log = open(args.output_prefix + ".trees", "w")
     args.density_dependent_lineage_birth_model = False
-    while rep < args.num_reps:
+    while rep < args.nreps:
         run_output_prefix = "{}.R{:04d}".format(args.output_prefix, rep+1)
-        logger.info("Run {} of {}: starting".format(rep+1, args.num_reps))
+        logger.info("Run {} of {}: starting".format(rep+1, args.nreps))
         supertramp_system = System(
                 dispersal_model="unconstrained",
                 random_seed=args.random_seed,
@@ -809,10 +809,10 @@ def main():
             try:
                 success = supertramp_system.run(args.ngens)
             except TotalExtinctionException:
-                logger.info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, args.num_reps, supertramp_system.current_gen))
-                logger.info("Run {} of {}: restarting".format(rep+1, args.num_reps))
+                logger.info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, args.nreps, supertramp_system.current_gen))
+                logger.info("Run {} of {}: restarting".format(rep+1, args.nreps))
             else:
-                logger.info("Run {} of {}: completed to termination condition".format(rep+1, args.num_reps))
+                logger.info("Run {} of {}: completed to termination condition".format(rep+1, args.nreps))
                 supertramp_system.report()
                 break
         rep += 1
