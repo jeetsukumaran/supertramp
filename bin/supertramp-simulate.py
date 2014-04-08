@@ -42,7 +42,7 @@ import logging
 import collections
 import numpy
 import inspect
-from BitVector import BitVector
+from supertramp.BitVector import BitVector
 import dendropy
 
 _LOGGING_LEVEL_ENVAR = "SUPERTRAMP_LOGGING_LEVEL"
