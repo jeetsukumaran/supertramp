@@ -12,3 +12,4 @@ setuptools-*.egg
 # Other
 *.log
 *.trees
+var/

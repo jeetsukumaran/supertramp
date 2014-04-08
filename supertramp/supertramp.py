@@ -704,23 +704,25 @@ class System(object):
 
     def report(self):
         # report_prefix = self.output_prefix + ".T{:08}d".format(self.current_gen)
+        self.tree_log.write("[&R] ")
         self.tree_log.write(self.phylogeny._as_newick_string())
+        self.tree_log.write(";\n")
         self.tree_log.flush()
 
 def main():
     parser = argparse.ArgumentParser(description="Biogeographical simulator")
 
     run_options = parser.add_argument_group("Run Options")
-    run_options.add_argument("-z", "--random-seed",
-            default=None,
-            help="Seed for random number generator engine.")
     run_options.add_argument("dispersal_model",
             choices=["constrained", "unconstrained"],
             help="Dispersal model: constrained or unconstrained by habitat")
+    run_options.add_argument("-z", "--random-seed",
+            default=None,
+            help="Seed for random number generator engine.")
     run_options.add_argument("-n", "--num-reps",
             type=int,
             default=1,
-            help="Number of replicates (default = %(default)s).")
+            help="number of replicates (default = %(default)s).")
     run_options.add_argument("-g", "--log-frequency",
             default=100,
             type=int,
