@@ -740,15 +740,18 @@ def main():
             dest="density_dependent_lineage_death_model",
             action="store_false",
             default=True,
-            help="Disables density-dependent lineage extinction model, which is"
-            "active by default. Under this model, once the carrying capacity of"
-            "a habitat is exceeded, lineages will be removed at random until the"
-            "number of lineages equals the carrying capacity, while if the"
-            "carrying capacity of a habitat is not exceeded, lineages will die"
-            "with probability given by the global per-lineage death probability"
-            "multiplied by 1-(n-K)/K, where where 'n' is the number of lineages"
-            "in the habitat and 'K' is the maximum number of lineages (carrying"
-            "capacity) of the habitat.")
+            help="By default, the lineage extinction follows a density-dependent "
+            "model. Under this default model, once the carrying capacity of "
+            "a habitat is exceeded, lineages will be removed at random until the "
+            "number of lineages equals the carrying capacity, while if the "
+            "carrying capacity of a habitat is not exceeded, lineages will die "
+            "with probability given by the global per-lineage death probability "
+            "multiplied by 1-(n-K)/K, where where 'n' is the number of lineages "
+            "in the habitat and 'K' is the maximum number of lineages (carrying "
+            "capacity) of the habitat. Select this option to replace this default "
+            "of density-dependent lineage death model with a fixed-death rate model "
+            "where the lineage death rate will be fixed to the global per-lineage "
+            "death probability through the course of the simulation.")
     simulation_param_options.add_argument("-y", "--niche-evolution-probability",
             default=0.00,
             type=float,
