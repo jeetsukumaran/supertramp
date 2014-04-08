@@ -714,6 +714,9 @@ def main():
     run_options.add_argument("-z", "--random-seed",
             default=None,
             help="Seed for random number generator engine.")
+    run_options.add_argument("dispersal_model",
+            choices=["constrained", "unconstrained"],
+            help="Dispersal model: constrained or unconstrained by habitat")
     run_options.add_argument("-n", "--num-reps",
             type=int,
             default=1,
@@ -802,7 +805,7 @@ def main():
         while not success:
             try:
                 success = supertramp_system.run(args.ngens)
-            except KeyError: #TotalExtinctionException:
+            except TotalExtinctionException:
                 logger.info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, args.num_reps, supertramp_system.current_gen))
                 logger.info("Run {} of {}: restarting".format(rep+1, args.num_reps))
             else:
