@@ -36,7 +36,7 @@ def main():
             help="Seed for random number generator engine.")
     parser.add_argument("--ngens",
             type=int,
-            default=10000000,
+            default=1000000,
             help="Number of generations to run (default = %(default)s).")
     parser.add_argument("--num-reps",
             type=int,
