@@ -46,6 +46,7 @@ import dendropy
 
 _LOGGING_LEVEL_ENVAR = "SUPERTRAMP_LOGGING_LEVEL"
 _LOGGING_FORMAT_ENVAR = "SUPERTRAMP_LOGGING_FORMAT"
+_DEBUG_MODE = False
 
 def dump_stack():
     for frame, filename, line_num, func, source_code, source_index in inspect.stack()[2:]:
@@ -392,7 +393,10 @@ class Lineage(dendropy.Node):
     def deregister_habitat(self, habitat):
         self.habitats[habitat.index] = 0
         self.island_localities[habitat.island.index] = 0
-        self.habitat_types[habitat.habitat_type.index] = 0
+        # TODO: simply because it is removed from one particular habitat on one
+        # particular island, does not mean that it is no longer associated with
+        # this habitat type!!!
+        # self.habitat_types[habitat.habitat_type.index] = 0
 
     def _get_label(self):
         return "S{:d}.{}".format(self.index, self.distribution_label)
@@ -434,6 +438,20 @@ class Lineage(dendropy.Node):
         assert c1.parent_node is self
         assert c2.parent_node is self
         return (c1, c2)
+
+    def _debug_check_dump_biogeography(self, out):
+        out.write("[{}:{}:{}:  ".format(id(self), self.index, self.label))
+        out.write("islands='{}'  ".format(self.island_localities))
+        out.write("habitat_types='{}'  ".format(self.habitat_types))
+        out.write("habitats='{}'".format(self.habitats))
+        out.write("]\n")
+
+    def num_child_nodes(self):
+        try:
+            return super(Lineage, self).num_child_nodes()
+        except AttributeError:
+            return len(self._child_nodes)
+
 
 class Phylogeny(dendropy.Tree):
 
@@ -598,6 +616,19 @@ class System(object):
         else:
             self.run_simple_death()
 
+    def _debug_check_habitat_000(self):
+        for nd in self.phylogeny:
+            if nd.is_leaf():
+                if str(nd.habitat_types) == "000":
+                    print("[{}]\n[{}]\n[{}]\n[{}]\n[{}]".format(
+                            nd.label,
+                            nd.distribution_label,
+                            nd.island_localities,
+                            nd.habitat_types,
+                            nd.habitats))
+                    print(self.phylogeny._as_newick_string())
+                assert str(nd.habitat_types) != "000"
+
     def run_simple_birth(self):
         tips = self.phylogeny.leaf_nodes()
         if not tips:
@@ -611,10 +642,13 @@ class System(object):
                     lineage_localities[lineage].append(habitat)
         splitting_lineage = self.rng.choice(list(lineage_localities.keys()))
         c0, c1 = splitting_lineage.diversify(finalize_distribution_label=True)
-        self.phylogeny._debug_check_tree()
+        if _DEBUG_MODE:
+            try:
+                self.phylogeny._debug_check_tree()
+            except AttributeError:
+                self.phylogeny.debug_check_tree()
         if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
             c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
-
         splitting_lineage_localities = lineage_localities[splitting_lineage]
         assert splitting_lineage_localities
         if len(splitting_lineage_localities) == 1:
@@ -690,7 +724,8 @@ class System(object):
                             update_splits=False, delete_outdegree_one=True)
                     if self.phylogeny.seed_node.num_child_nodes() == 0:
                         raise TotalExtinctionException()
-            else:
+            elif _DEBUG_MODE:
+                ## sanity checking ...
                 found = True
                 for island in self.islands:
                     for habitat in island.habitat_list:
@@ -701,11 +736,13 @@ class System(object):
                         break
                 assert found, lineage
 
-
     def report(self):
         # report_prefix = self.output_prefix + ".T{:08}d".format(self.current_gen)
         self.tree_log.write("[&R] ")
-        self.tree_log.write(self.phylogeny._as_newick_string())
+        try:
+            self.tree_log.write(self.phylogeny._as_newick_string())
+        except AttributeError:
+            self.tree_log.write(self.phylogeny.as_newick_string())
         self.tree_log.write(";\n")
         self.tree_log.flush()
 
@@ -727,6 +764,10 @@ def main():
             default=100,
             type=int,
             help="Frequency that background progress messages get written to the log (default = %(default)s).")
+    run_options.add_argument("--debug-mode",
+            action="store_true",
+            default=False,
+            help="Run in debugging mode.")
     simulation_param_options = parser.add_argument_group("Simulation Parameters")
     simulation_param_options.add_argument("-b", "--birth-probability",
             dest="global_per_lineage_birth_prob",
@@ -777,6 +818,7 @@ def main():
         help="Prefix for output files (default='%(default)s').")
     args = parser.parse_args()
 
+    _DEBUG_MODE = args.debug_mode
     logger = RunLogger(name="supertramp",
             log_path=args.output_prefix + ".log")
     if args.random_seed is None:
