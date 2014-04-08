@@ -527,7 +527,7 @@ class System(object):
         for ht_label in self.habitat_type_labels:
             h = HabitatType(label=ht_label)
             self.habitat_types.append(h)
-        self.all_habitat_types_bitmask = (1 << len(self.islands)) - 1
+        self.all_habitat_types_bitmask = (1 << len(self.habitat_types)) - 1
 
         # set up dispersal regime
         if self.dispersal_model == "unconstrained":
