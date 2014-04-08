@@ -48,11 +48,11 @@ def main():
         args.random_seed = random.randint(0, sys.maxsize)
     rng = random.Random(args.random_seed)
     python_path = "python3"
-    supertramp_path = os.path.join(
+    supertramp_path = os.path.abspath(os.path.join(
             os.path.dirname(__file__),
             os.pardir,
             "supertramp",
-            "supertramp.py")
+            "supertramp.py"))
 
     dispersal_models = ["constrained", "unconstrained"]
     # birth_rates = [0.001, 0.0001, 0.00001]
