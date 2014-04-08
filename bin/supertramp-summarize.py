@@ -1,11 +1,73 @@
 #! /usr/bin/env python
 
+import sys
+import os
 import argparse
+import json
+import collections
+import dendropy
+
+class TreeColorizer(object):
+
+    def __init__(self):
+
+        self.island_colors = collections.defaultdict(lambda: "#666666")
+        self.island_colors.update({
+                "0001" : "#ff0000",
+                "0010" : "#00ff00",
+                "0100" : "#0000ff",
+                "1000" : "#ffff00",
+                })
+        self.habitat_colors = {}
+        self.habitat_colors.update({
+                "001" : "#ff00ff",
+                "010" : "#00ffff",
+                "100" : "#ff0066",
+                })
+
+    def colorize_trees(self, trees, outf=None):
+        self.encode_taxa(trees.taxon_namespace)
+        if outf is not None:
+            self.write_nexus(trees, outf)
+
+    def encode_taxa(self, taxa):
+        for t in taxa:
+            label_parts = t.label.split(".")
+            t.island_code = label_parts[1]
+            try:
+                t.island_color = self.island_colors[t.island_code]
+            except KeyError:
+                t.island_color = None
+            t.habitat_code = label_parts[2]
+            try:
+                t.habitat_color = self.habitat_colors[t.habitat_code]
+            except KeyError:
+                t.habitat_color = None
+
+    def write_nexus(self, trees, outf):
+        parts = []
+        parts.append("#NEXUS\n")
+        parts.append("BEGIN TAXA;")
+        parts.append("    DIMENSIONS NTAX={};".format(len(trees.taxon_namespace)))
+        parts.append("    TAXLABELS")
+        for t in trees.taxon_namespace:
+            if t.island_color is None:
+                color = ""
+            else:
+                color = "[&!color={}]".format(t.island_color)
+            parts.append("        '{}'{}".format(t.label, color))
+        parts.append("    ;")
+        parts.append("END;")
+        parts.append("BEGIN TREES;")
+        for tree_idx, tree in enumerate(trees):
+            parts.append("    TREE T{} = [&R] {};".format(tree_idx, tree._as_newick_string()))
+        parts.append("END;")
+        outf.write("\n".join(parts))
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-            "source_path",
+            "source_paths",
             nargs="+",
             help="Path to run output directories.")
     parser.add_argument('-o', '--output-prefix',
@@ -16,6 +78,32 @@ def main():
         metavar='OUTPUT-FILE-PREFIX',
         help="Prefix for output files (default='%(default)s').")
     args = parser.parse_args()
+    args.quiet = False
+
+    tree_colorizer = TreeColorizer()
+    for source_path in args.source_paths:
+        source_dir = os.path.abspath(os.path.expanduser(os.path.expandvars(source_path)))
+        run_manifest_path = os.path.join(source_dir, "run-manifest.json")
+        if not os.path.exists(run_manifest_path):
+            sys.exit("Manifest file not found: {}".format(run_manifest_path))
+        with open(run_manifest_path, "r") as run_manifest_f:
+            run_manifest = json.load(run_manifest_f)
+        jobs = list(run_manifest.keys())
+        for key_idx, key in enumerate(jobs):
+            if not args.quiet:
+                sys.stderr.write("Processing job {} of {}: {}\n".format(key_idx+1, len(jobs), key))
+            run_data = run_manifest[key]
+            tree_filepath = os.path.join(source_dir, run_data["treefile"])
+            trees = dendropy.TreeList.get_from_path(
+                    tree_filepath,
+                    "newick",
+                    suppress_internal_taxa=True)
+            colorized_trees_filepath = args.output_prefix + ".{}.trees".format(key)
+            with open(colorized_trees_filepath, "w") as trees_outf:
+                tree_colorizer.colorize_trees(trees, trees_outf)
+            # for tree_idx, tree in enumerate(trees):
+            #     if not args.quiet:
+            #         sys.stderr.write("Processing tree {} of {} in job {} of {}\n".format(tree_idx+1, len(trees), key_idx+1, len(jobs), key))
 
 
 if __name__ == "__main__":
