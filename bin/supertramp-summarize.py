@@ -34,35 +34,37 @@ class TreeColorizer(object):
         self.encode_taxa(_get_taxa(trees))
         for tree in trees:
             for nd in tree:
-                if nd.taxon is None:
+                if nd.taxon is None and nd.label is None:
                     continue
-                if nd.taxon.habitat_color is not None:
+                if nd.taxon and nd.taxon.habitat_color is not None:
                     nd.annotations.add_new("!color", nd.taxon.habitat_color)
-                # if nd.is_leaf():
-                #     if nd.taxon.habitat_color is not None:
-                #         nd.annotations.add_new("!color", nd.taxon.habitat_color)
-                # else:
-                #     nd.taxon = None
+                elif nd.label is not None:
+                    self.encode_labeled_item(nd, annotate_habitat_color=True)
         if outf is not None:
             try:
                 trees.write_to_stream(outf, "nexus")
             except AttributeError:
                 self.write_nexus(trees, outf)
 
+    def encode_labeled_item(self,
+            t,
+            annotate_island_color=False,
+            annotate_habitat_color=False):
+        if annotate_island_color and annotate_habitat_color:
+            raise TypeError("Cannot simultaneously annotate island and habitat color")
+        label_parts = t.label.split(".")
+        t.island_code = label_parts[1]
+        t.island_color = self.island_colors[t.island_code]
+        if annotate_island_color and t.island_color is not None:
+            t.annotations.add_new("!color", t.island_color)
+        t.habitat_code = label_parts[2]
+        t.habitat_color = self.habitat_colors.get(t.habitat_code, None)
+        if annotate_habitat_color and t.habitat_color is not None:
+            t.annotations.add_new("!color", t.habitat_color)
+
     def encode_taxa(self, taxa):
         for t in taxa:
-            label_parts = t.label.split(".")
-            t.island_code = label_parts[1]
-            try:
-                t.island_color = self.island_colors[t.island_code]
-                t.annotations.add_new("!color", t.island_color)
-            except KeyError:
-                t.island_color = None
-            t.habitat_code = label_parts[2]
-            try:
-                t.habitat_color = self.habitat_colors[t.habitat_code]
-            except KeyError:
-                t.habitat_color = None
+            self.encode_labeled_item(t, annotate_island_color=True)
 
     def write_nexus(self, trees, outf):
         parts = []
