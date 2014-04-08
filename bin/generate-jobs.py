@@ -58,7 +58,7 @@ def main():
     # birth_rates = [0.001, 0.0001, 0.00001]
     # dispersal_rate_factors = [0.01, 0.5, 1.0, 2.0, 10.0]
     # niche_evolution_probs = [0.001, 0.01, 0.10, 1.0]
-    birth_rates = [0.001, 0.0001]
+    birth_rates = [0.01, 0.001, 0.0001]
     dispersal_rate_factors = [0.01, 1.0, 10.0]
     niche_evolution_probs = [0.01, 0.10, 1.0]
     run_manifest = {}
