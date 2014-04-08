@@ -7,6 +7,11 @@ import json
 import collections
 import dendropy
 
+if dendropy.__version__.startswith("4"):
+    _get_taxa = lambda x: x.taxon_namespace
+else:
+    _get_taxa = lambda x: x.taxon_set
+
 class TreeColorizer(object):
 
     def __init__(self):
@@ -22,13 +27,27 @@ class TreeColorizer(object):
         self.habitat_colors.update({
                 "001" : "#ff00ff",
                 "010" : "#00ffff",
-                "100" : "#ff0066",
+                "100" : "#ff8800",
                 })
 
     def colorize_trees(self, trees, outf=None):
-        self.encode_taxa(trees.taxon_namespace)
+        self.encode_taxa(_get_taxa(trees))
+        for tree in trees:
+            for nd in tree:
+                if nd.taxon is None:
+                    continue
+                if nd.taxon.habitat_color is not None:
+                    nd.annotations.add_new("!color", nd.taxon.habitat_color)
+                # if nd.is_leaf():
+                #     if nd.taxon.habitat_color is not None:
+                #         nd.annotations.add_new("!color", nd.taxon.habitat_color)
+                # else:
+                #     nd.taxon = None
         if outf is not None:
-            self.write_nexus(trees, outf)
+            try:
+                trees.write_to_stream(outf, "nexus")
+            except AttributeError:
+                self.write_nexus(trees, outf)
 
     def encode_taxa(self, taxa):
         for t in taxa:
@@ -36,6 +55,7 @@ class TreeColorizer(object):
             t.island_code = label_parts[1]
             try:
                 t.island_color = self.island_colors[t.island_code]
+                t.annotations.add_new("!color", t.island_color)
             except KeyError:
                 t.island_color = None
             t.habitat_code = label_parts[2]
@@ -48,9 +68,9 @@ class TreeColorizer(object):
         parts = []
         parts.append("#NEXUS\n")
         parts.append("BEGIN TAXA;")
-        parts.append("    DIMENSIONS NTAX={};".format(len(trees.taxon_namespace)))
+        parts.append("    DIMENSIONS NTAX={};".format(len(_get_taxa(trees))))
         parts.append("    TAXLABELS")
-        for t in trees.taxon_namespace:
+        for t in _get_taxa(trees):
             if t.island_color is None:
                 color = ""
             else:
@@ -96,8 +116,7 @@ def main():
             tree_filepath = os.path.join(source_dir, run_data["treefile"])
             trees = dendropy.TreeList.get_from_path(
                     tree_filepath,
-                    "newick",
-                    suppress_internal_taxa=True)
+                    "newick")
             colorized_trees_filepath = args.output_prefix + ".{}.trees".format(key)
             with open(colorized_trees_filepath, "w") as trees_outf:
                 tree_colorizer.colorize_trees(trees, trees_outf)
