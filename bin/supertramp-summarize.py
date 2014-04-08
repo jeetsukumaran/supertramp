@@ -19,9 +19,9 @@ class TreeColorizer(object):
         self.island_colors = collections.defaultdict(lambda: "#666666")
         self.island_colors.update({
                 "0001" : "#ff0000",
-                "0010" : "#00ff00",
+                "0010" : "#00cc00",
                 "0100" : "#0000ff",
-                "1000" : "#ffff00",
+                "1000" : "#cccc00",
                 })
         self.habitat_colors = {}
         self.habitat_colors.update({
