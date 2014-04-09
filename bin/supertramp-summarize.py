@@ -103,10 +103,10 @@ class TreeProcessor(object):
             tree.stats["size"] = num_tips
             tree.stats["length"] = total_length
 
-            weighted_dist_total = 0.0
-            weighted_items = 0
-            unweighted_dist_total = 0.0
-            unweighted_items = 0
+            weighted_habitat_dist_total = 0.0
+            weighted_habitat_dist_count = 0
+            unweighted_habitat_dist_total = 0.0
+            unweighted_habitat_dist_count = 0
             habitat_keys = sorted(nodes_by_habitat.keys())
             for habitat_key in habitat_keys:
                 weighted_habitat_dist_key = "habitat.{}.pdist.weighted".format(habitat_key)
@@ -117,20 +117,49 @@ class TreeProcessor(object):
                     tree.stats[weighted_habitat_dist_key] = "N/A"
                 else:
                     weighted = weighted/total_length
-                    weighted_dist_total += weighted
+                    weighted_habitat_dist_total += weighted
                     tree.stats[weighted_habitat_dist_key] = weighted
-                    weighted_items += 1
+                    weighted_habitat_dist_count += 1
                 if unweighted is None:
                     assert weighted is None
                     tree.stats[unweighted_habitat_dist_key] = "N/A"
                 else:
                     unweighted = unweighted/num_tips
-                    unweighted_dist_total += unweighted
+                    unweighted_habitat_dist_total += unweighted
                     tree.stats[unweighted_habitat_dist_key] = weighted
-                    unweighted_items += 1
-            assert weighted_items == unweighted_items
-            tree.stats["habitat.mean.pdist.weighted"] = weighted_dist_total / weighted_items
-            tree.stats["habitat.mean.pdist.unweighted"] = unweighted_dist_total / unweighted_items
+                    unweighted_habitat_dist_count += 1
+            assert weighted_habitat_dist_count == unweighted_habitat_dist_count
+            tree.stats["habitat.mean.pdist.weighted"] = weighted_habitat_dist_total / weighted_habitat_dist_count
+            tree.stats["habitat.mean.pdist.unweighted"] = unweighted_habitat_dist_total / unweighted_habitat_dist_count
+
+            weighted_island_dist_total = 0.0
+            weighted_island_dist_count = 0
+            unweighted_island_dist_total = 0.0
+            unweighted_island_dist_count = 0
+            island_keys = sorted(nodes_by_island.keys())
+            for island_key in island_keys:
+                weighted_island_dist_key = "island.{}.pdist.weighted".format(island_key)
+                unweighted_island_dist_key = "island.{}.pdist.unweighted".format(island_key)
+                weighted, unweighted = self.get_mean_patristic_distance(pdm, nodes_by_island[island_key])
+                if weighted is None:
+                    assert unweighted is None
+                    tree.stats[weighted_island_dist_key] = "N/A"
+                else:
+                    weighted = weighted/total_length
+                    weighted_island_dist_total += weighted
+                    tree.stats[weighted_island_dist_key] = weighted
+                    weighted_island_dist_count += 1
+                if unweighted is None:
+                    assert weighted is None
+                    tree.stats[unweighted_island_dist_key] = "N/A"
+                else:
+                    unweighted = unweighted/num_tips
+                    unweighted_island_dist_total += unweighted
+                    tree.stats[unweighted_island_dist_key] = weighted
+                    unweighted_island_dist_count += 1
+            assert weighted_island_dist_count == unweighted_island_dist_count
+            tree.stats["island.mean.pdist.weighted"] = weighted_island_dist_total / weighted_island_dist_count
+            tree.stats["island.mean.pdist.unweighted"] = unweighted_island_dist_total / unweighted_island_dist_count
 
             if summaries is not None:
                 summaries.append(dict(tree.stats))
