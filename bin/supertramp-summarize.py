@@ -100,6 +100,7 @@ class TreeProcessor(object):
                 tree.stats.update(params)
             tree.stats["size"] = num_tips
             tree.stats["length"] = total_length
+
             weighted_dist_total = 0.0
             unweighted_dist_total = 0.0
             nitems = 0
@@ -108,13 +109,30 @@ class TreeProcessor(object):
                 weighted, unweighted = self.get_mean_patristic_distance(pdm, nodes_by_habitat[key])
                 weighted = weighted/total_length
                 unweighted = unweighted/num_tips
-                tree.stats["habitat.{}.pdist.weighted".format(key+1)] = weighted
-                tree.stats["habitat.{}.pdist.unweighted".format(key+1)] = unweighted
+                tree.stats["habitat.{}.pdist.weighted".format(key)] = weighted
+                tree.stats["habitat.{}.pdist.unweighted".format(key)] = unweighted
                 weighted_dist_total += weighted
                 unweighted_dist_total += unweighted
                 nitems += 1
             tree.stats["habitat.mean.pdist.weighted"] = weighted_dist_total / nitems
             tree.stats["habitat.mean.pdist.unweighted"] = unweighted_dist_total / nitems
+
+            weighted_dist_total = 0.0
+            unweighted_dist_total = 0.0
+            nitems = 0
+            island_keys = sorted(nodes_by_island.keys())
+            for key in island_keys:
+                weighted, unweighted = self.get_mean_patristic_distance(pdm, nodes_by_island[key])
+                weighted = weighted/total_length
+                unweighted = unweighted/num_tips
+                tree.stats["island.{}.pdist.weighted".format(key)] = weighted
+                tree.stats["island.{}.pdist.unweighted".format(key)] = unweighted
+                weighted_dist_total += weighted
+                unweighted_dist_total += unweighted
+                nitems += 1
+            tree.stats["island.mean.pdist.weighted"] = weighted_dist_total / nitems
+            tree.stats["island.mean.pdist.unweighted"] = unweighted_dist_total / nitems
+
             if summaries is not None:
                 summaries.append(dict(tree.stats))
 
