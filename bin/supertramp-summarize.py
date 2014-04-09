@@ -48,6 +48,8 @@ class TreeProcessor(object):
                 self.write_nexus(trees, outf)
 
     def get_mean_patristic_distance(self, pdm, nodes):
+        if len(nodes) == 1:
+            return None, None
         weighted_dist = 0.0
         unweighted_dist = 0.0
         ncomps = 0
@@ -102,36 +104,33 @@ class TreeProcessor(object):
             tree.stats["length"] = total_length
 
             weighted_dist_total = 0.0
+            weighted_items = 0
             unweighted_dist_total = 0.0
-            nitems = 0
+            unweighted_items = 0
             habitat_keys = sorted(nodes_by_habitat.keys())
-            for key in habitat_keys:
-                weighted, unweighted = self.get_mean_patristic_distance(pdm, nodes_by_habitat[key])
-                weighted = weighted/total_length
-                unweighted = unweighted/num_tips
-                tree.stats["habitat.{}.pdist.weighted".format(key)] = weighted
-                tree.stats["habitat.{}.pdist.unweighted".format(key)] = unweighted
-                weighted_dist_total += weighted
-                unweighted_dist_total += unweighted
-                nitems += 1
-            tree.stats["habitat.mean.pdist.weighted"] = weighted_dist_total / nitems
-            tree.stats["habitat.mean.pdist.unweighted"] = unweighted_dist_total / nitems
-
-            weighted_dist_total = 0.0
-            unweighted_dist_total = 0.0
-            nitems = 0
-            island_keys = sorted(nodes_by_island.keys())
-            for key in island_keys:
-                weighted, unweighted = self.get_mean_patristic_distance(pdm, nodes_by_island[key])
-                weighted = weighted/total_length
-                unweighted = unweighted/num_tips
-                tree.stats["island.{}.pdist.weighted".format(key)] = weighted
-                tree.stats["island.{}.pdist.unweighted".format(key)] = unweighted
-                weighted_dist_total += weighted
-                unweighted_dist_total += unweighted
-                nitems += 1
-            tree.stats["island.mean.pdist.weighted"] = weighted_dist_total / nitems
-            tree.stats["island.mean.pdist.unweighted"] = unweighted_dist_total / nitems
+            for habitat_key in habitat_keys:
+                weighted_habitat_dist_key = "habitat.{}.pdist.weighted".format(habitat_key)
+                unweighted_habitat_dist_key = "habitat.{}.pdist.unweighted".format(habitat_key)
+                weighted, unweighted = self.get_mean_patristic_distance(pdm, nodes_by_habitat[habitat_key])
+                if weighted is None:
+                    assert unweighted is None
+                    tree.stats[weighted_habitat_dist_key] = "N/A"
+                else:
+                    weighted = weighted/total_length
+                    weighted_dist_total += weighted
+                    tree.stats[weighted_habitat_dist_key] = weighted
+                    weighted_items += 1
+                if unweighted is None:
+                    assert weighted is None
+                    tree.stats[unweighted_habitat_dist_key] = "N/A"
+                else:
+                    unweighted = unweighted/num_tips
+                    unweighted_dist_total += unweighted
+                    tree.stats[unweighted_habitat_dist_key] = weighted
+                    unweighted_items += 1
+            assert weighted_items == unweighted_items
+            tree.stats["habitat.mean.pdist.weighted"] = weighted_dist_total / weighted_items
+            tree.stats["habitat.mean.pdist.unweighted"] = unweighted_dist_total / unweighted_items
 
             if summaries is not None:
                 summaries.append(dict(tree.stats))
