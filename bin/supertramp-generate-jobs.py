@@ -82,7 +82,7 @@ def main():
                             birth_rate=birth_rate,
                             dispersal_rate=dispersal_rate,
                             niche_evolution_prob=niche_evolution_prob)
-                    output_prefix = stem + ".run"
+                    output_prefix = stem
                     run_cmd = []
                     run_cmd.append(supertramp_path)
                     run_cmd.extend(["-z", str(rng.randint(0, sys.maxsize))])

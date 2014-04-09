@@ -97,7 +97,7 @@ class TreeProcessor(object):
                             nodes_by_habitat[habitat_idx].append(nd)
             pdm = treecalc.PatristicDistanceMatrix(tree=tree)
 
-            tree.stats = {}
+            tree.stats = collections.defaultdict(lambda:"NA")
             if params is not None:
                 tree.stats.update(params)
             tree.stats["size"] = num_tips
@@ -114,7 +114,7 @@ class TreeProcessor(object):
                 weighted, unweighted = self.get_mean_patristic_distance(pdm, nodes_by_habitat[habitat_key])
                 if weighted is None:
                     assert unweighted is None
-                    tree.stats[weighted_habitat_dist_key] = "N/A"
+                    tree.stats[weighted_habitat_dist_key] = "NA"
                 else:
                     weighted = weighted/total_length
                     weighted_habitat_dist_total += weighted
@@ -122,7 +122,7 @@ class TreeProcessor(object):
                     weighted_habitat_dist_count += 1
                 if unweighted is None:
                     assert weighted is None
-                    tree.stats[unweighted_habitat_dist_key] = "N/A"
+                    tree.stats[unweighted_habitat_dist_key] = "NA"
                 else:
                     unweighted = unweighted/num_tips
                     unweighted_habitat_dist_total += unweighted
@@ -143,7 +143,7 @@ class TreeProcessor(object):
                 weighted, unweighted = self.get_mean_patristic_distance(pdm, nodes_by_island[island_key])
                 if weighted is None:
                     assert unweighted is None
-                    tree.stats[weighted_island_dist_key] = "N/A"
+                    tree.stats[weighted_island_dist_key] = "NA"
                 else:
                     weighted = weighted/total_length
                     weighted_island_dist_total += weighted
@@ -151,7 +151,7 @@ class TreeProcessor(object):
                     weighted_island_dist_count += 1
                 if unweighted is None:
                     assert weighted is None
-                    tree.stats[unweighted_island_dist_key] = "N/A"
+                    tree.stats[unweighted_island_dist_key] = "NA"
                 else:
                     unweighted = unweighted/num_tips
                     unweighted_island_dist_total += unweighted
@@ -216,14 +216,7 @@ def main():
     parser.add_argument(
             "source_paths",
             nargs="+",
-            help="Path to run output directories.")
-    parser.add_argument('-o', '--output-prefix',
-        action='store',
-        dest='output_prefix',
-        type=str,
-        default='supertramp.summary',
-        metavar='OUTPUT-FILE-PREFIX',
-        help="Prefix for output files (default='%(default)s').")
+            help="Path(s) to directory or directories with simulation generated files.")
     args = parser.parse_args()
     args.quiet = False
 
@@ -238,6 +231,7 @@ def main():
     summaries = []
     for source_path in args.source_paths:
         source_dir = os.path.abspath(os.path.expanduser(os.path.expandvars(source_path)))
+        output_dir = source_dir
         run_manifest_path = os.path.join(source_dir, "run-manifest.json")
         if not os.path.exists(run_manifest_path):
             sys.exit("Manifest file not found: {}".format(run_manifest_path))
@@ -255,7 +249,7 @@ def main():
             trees = dendropy.TreeList.get_from_path(
                     tree_filepath,
                     "newick")
-            colorized_trees_filepath = args.output_prefix + ".{}.trees".format(job)
+            colorized_trees_filepath = os.path.join(output_dir, "{}.processed.trees".format(job))
             with open(colorized_trees_filepath, "w") as trees_outf:
                 summary_stats = tree_processor.process_trees(
                         trees,
@@ -265,10 +259,11 @@ def main():
     param_fields = list(param_keys.keys())
     stat_fields = sorted(set(summaries[0].keys()) - set(param_fields))
     all_fields = param_fields + stat_fields
-    summary_stats_fpath = args.output_prefix + ".summary.txt"
+    summary_stats_fpath = os.path.join(output_dir, "summary.txt")
     with open(summary_stats_fpath, "w") as summary_outf:
         writer = csv.DictWriter(summary_outf,
                 fieldnames=all_fields,
+                restval="NA",
                 delimiter="\t")
         writer.writeheader()
         writer.writerows(summaries)
