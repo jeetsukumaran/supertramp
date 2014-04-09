@@ -5,6 +5,7 @@ import os
 import argparse
 import json
 import collections
+import csv
 import dendropy
 from dendropy import treecalc
 if dendropy.__version__.startswith("4"):
@@ -59,7 +60,11 @@ class TreeProcessor(object):
                 ncomps += 1
         return weighted_dist/ncomps, unweighted_dist/ncomps
 
-    def process_trees(self, trees, trees_outf):
+    def process_trees(self,
+            trees,
+            trees_outf=None,
+            params=None,
+            summaries=None):
         self.encode_taxa(_get_taxa(trees))
         for tree in trees:
             num_tips = 0
@@ -89,10 +94,12 @@ class TreeProcessor(object):
                         if i == "1":
                             nodes_by_habitat[habitat_idx].append(nd)
             pdm = treecalc.PatristicDistanceMatrix(tree=tree)
+
             tree.stats = {}
+            if params is not None:
+                tree.stats.update(params)
             tree.stats["size"] = num_tips
             tree.stats["length"] = total_length
-
             weighted_dist_total = 0.0
             unweighted_dist_total = 0.0
             nitems = 0
@@ -108,6 +115,8 @@ class TreeProcessor(object):
                 nitems += 1
             tree.stats["habitat.mean.pdist.weighted"] = weighted_dist_total / nitems
             tree.stats["habitat.mean.pdist.unweighted"] = unweighted_dist_total / nitems
+            if summaries is not None:
+                summaries.append(dict(tree.stats))
 
         if trees_outf is not None:
             try:
@@ -173,6 +182,14 @@ def main():
     args.quiet = False
 
     tree_processor = TreeProcessor()
+    param_keys = collections.OrderedDict()
+    param_keys["dispersal.model"]      = "dispersal_model"
+    param_keys["birth.rate"]           = "birth_rate"
+    param_keys["dispersal.factor"]     = "dispersal_rate_factor"
+    param_keys["dispersal.rate"]       = "dispersal_rate"
+    param_keys["niche.evolution.prob"] = "niche_evolution_prob"
+
+    summaries = []
     for source_path in args.source_paths:
         source_dir = os.path.abspath(os.path.expanduser(os.path.expandvars(source_path)))
         run_manifest_path = os.path.join(source_dir, "run-manifest.json")
@@ -181,19 +198,32 @@ def main():
         with open(run_manifest_path, "r") as run_manifest_f:
             run_manifest = json.load(run_manifest_f)
         jobs = list(run_manifest.keys())
-        for key_idx, key in enumerate(jobs):
+        for job_idx, job in enumerate(jobs):
             if not args.quiet:
-                sys.stderr.write("Processing job {} of {}: {}\n".format(key_idx+1, len(jobs), key))
-            run_data = run_manifest[key]
+                sys.stderr.write("Processing job {} of {}: {}\n".format(job_idx+1, len(jobs), job))
+            params = {}
+            for param_key in param_keys:
+                params[param_key] = run_manifest[job][param_keys[param_key]]
+            run_data = run_manifest[job]
             tree_filepath = os.path.join(source_dir, run_data["treefile"])
             trees = dendropy.TreeList.get_from_path(
                     tree_filepath,
                     "newick")
-            colorized_trees_filepath = args.output_prefix + ".{}.trees".format(key)
+            colorized_trees_filepath = args.output_prefix + ".{}.trees".format(job)
             with open(colorized_trees_filepath, "w") as trees_outf:
-                summary_stats = tree_processor.process_trees(trees, trees_outf=trees_outf)
-    # summary_stats_fpath = args.output_prefix + ".summary.txt"
-    # with open(summary_stats_fpath, "w") as summary_outf:
+                summary_stats = tree_processor.process_trees(
+                        trees,
+                        trees_outf=trees_outf,
+                        params=params,
+                        summaries=summaries)
+    param_fields = list(param_keys.keys())
+    stat_fields = sorted(set(summaries[0].keys()) - set(param_fields))
+    all_fields = param_fields + stat_fields
+    summary_stats_fpath = args.output_prefix + ".summary.txt"
+    with open(summary_stats_fpath, "w") as summary_outf:
+        writer = csv.DictWriter(summary_outf, fieldnames=all_fields)
+        writer.writeheader()
+        writer.writerows(summaries)
 
 if __name__ == "__main__":
     main()
