@@ -51,8 +51,11 @@ def main():
         args.random_seed = random.randint(0, sys.maxsize)
     rng = random.Random(args.random_seed)
     if args.venv is not None:
-        vp = os.path.expanduser(os.path.expandvars(args.venv))
-        source_venv = "source {}".format(os.path.abspath(os.path.join(vp, "bin", "activate")))
+        venv_dir = os.path.expanduser(os.path.expandvars(args.venv))
+        venv_activate = os.path.abspath(os.path.join(venv_dir, "bin", "activate"))
+        if not os.path.exists(venv_activate):
+            raise Exception("Virtual environment activation script not found: '{}'".format(venv_activate))
+        source_venv = "source {}".format(venv_activate)
     else:
         source_venv = ""
     # python_path = "python3"
