@@ -267,7 +267,9 @@ def main():
     all_fields = param_fields + stat_fields
     summary_stats_fpath = args.output_prefix + ".summary.txt"
     with open(summary_stats_fpath, "w") as summary_outf:
-        writer = csv.DictWriter(summary_outf, fieldnames=all_fields)
+        writer = csv.DictWriter(summary_outf,
+                fieldnames=all_fields,
+                delimiter="\t")
         writer.writeheader()
         writer.writerows(summaries)
 
