@@ -253,9 +253,7 @@ class Island(object):
             rng,
             label,
             habitat_types,
-            habitat_carrying_capacities=None,
-            dispersal_rates=None,
-            dispersal_source_habitat_types=None):
+            habitat_carrying_capacities=None):
         self.index = self.__class__.counter
         self.__class__.counter += 1
         self.rng = rng
@@ -270,23 +268,6 @@ class Island(object):
             self.habitat_carrying_capacities = habitat_carrying_capacities
         self.habitat_list = []
         self.habitats_by_type = {}
-        if dispersal_source_habitat_types is None:
-            self.dispersal_source_habitat_types = []
-        else:
-            self.dispersal_source_habitat_types = dispersal_source_habitat_types
-        self.dispersal_source_habitat_list = []
-
-        # Rate of dispersal to other habitats:
-        #   - keys = destination (Habitat object)
-        #   - values = rate (float)
-        self._dispersal_rates = collections.OrderedDict()
-        self._dispersal_dest_list = []
-        self._dispersal_rate_list = []
-        self._aggregate_rate_of_dispersal = 0.0
-        if dispersal_rates is not None:
-            for dest in dispersal_rates:
-                self._dispersal_rates[dest] = dispersal_rates[dest]
-            self.compile_dispersal_rates()
 
         # construct habitats
         for ht_idx, ht in enumerate(self.habitat_types):
@@ -296,51 +277,35 @@ class Island(object):
                     island=self)
             self.habitat_list.append(h)
             self.habitats_by_type[ht] = h
-            if ht in self.dispersal_source_habitat_types:
-                self.dispersal_source_habitat_list.append(h)
+
+        # initialize dispersal regime
+        self._dispersal_rates = {}
+        for ht in self.habitat_types:
+            self._dispersal_rates[ht] = {}
 
     def __str__(self):
         return self.label
 
-    def set_dispersal_rate(self, dest, rate):
+    def set_dispersal_rate(self, habitat_type, dest_island, rate):
         """
         Set a specific dispersal.
         """
-        self._dispersal_rates[dest] = rate
-        self._dispersal_dest_list = []
-        self._dispersal_rate_list = []
-        self._aggregate_rate_of_dispersal = 0.0
-
-    def compile_dispersal_rates(self):
-        """
-        Split dictionary into list of destinations and rates.
-        """
-        self._dispersal_dest_list = []
-        self._dispersal_rate_list = []
-        sum_of_rates = 0.0
-        for dest in self._dispersal_rates:
-            rate = self._dispersal_rates[dest]
-            self._dispersal_dest_list.append(dest)
-            self._dispersal_rate_list.append(rate)
-            sum_of_rates += rate
-        self._aggregate_rate_of_dispersal = sum_of_rates
+        self._dispersal_rates[habitat_type][dest_island] = rate
 
     def run_dispersals(self):
-        if self.rng.uniform(0, 1) <= self._aggregate_rate_of_dispersal:
-            dest = weighted_choice(self._dispersal_dest_list, self._dispersal_rate_list, rng=self.rng)
-            self.disperse_to(dest)
+        for habitat_type in self._dispersal_rates:
+            for dest_island in self._dispersal_rates[habitat_type]:
+                habitat = self.habitats_by_type[habitat_type]
+                rate = self._dispersal_rates[habitat_type][dest_island]
+                if not habitat.lineages or rate <= 0.0:
+                    continue
+                if self.rng.uniform(0, 1) <= rate:
+                    lineage = self.rng.choice(list(habitat.lineages))
+                    dest_island.receive_migrant(lineage=lineage, habitat_type=lineage.habitat_type)
 
     def process_migrants(self):
         for habitat in self.habitat_list:
             habitat.process_migrants()
-
-    def disperse_to(self, destination_island):
-        hx = [h for h in self.dispersal_source_habitat_list if h.lineages]
-        if not hx:
-            return
-        habitat = self.rng.choice(hx)
-        lineage = self.rng.choice(list(habitat.lineages))
-        destination_island.receive_migrant(lineage=lineage, habitat_type=lineage.habitat_type)
 
     def receive_migrant(self, lineage, habitat_type):
         assert lineage.habitat_type is habitat_type
@@ -547,12 +512,6 @@ class System(object):
             self.habitat_types.append(h)
         self.all_habitat_types_bitmask = (1 << len(self.habitat_types)) - 1
 
-        # set up dispersal regime
-        if self.dispersal_model == "unconstrained":
-            self.dispersal_source_habitat_types = list(self.habitat_types)
-        else:
-            self.dispersal_source_habitat_types = [self.habitat_types[0]]
-
         # create islands
         cc = [self.island_habitat_carrying_capacity] * len(self.habitat_types)
         for island_label in self.island_labels:
@@ -560,19 +519,29 @@ class System(object):
                     rng=self.rng,
                     label=island_label,
                     habitat_types=self.habitat_types,
-                    habitat_carrying_capacities=cc,
-                    dispersal_source_habitat_types=self.dispersal_source_habitat_types)
+                    habitat_carrying_capacities=cc)
             self.islands.append(island)
         self.all_islands_bitmask = (1 << len(self.islands)) - 1
 
+        # set up dispersal regime
+        if self.dispersal_model == "unconstrained":
+            self.dispersal_source_habitat_types = list(self.habitat_types)
+        else:
+            self.dispersal_source_habitat_types = [self.habitat_types[0]]
+
         # sum of rates of dispersing out of any island == global dispersal rate
-        island_dispersal_rate = self.global_dispersal_rate / ((len(self.islands) ** 2) - 1)
+        island_dispersal_rate = float(self.global_dispersal_rate) / ((len(self.islands) ** 2) - 1)
+        habitat_dispersal_rates = {}
+        for idx, habitat_type in enumerate(self.habitat_types):
+            if habitat_type in self.dispersal_source_habitat_types:
+                habitat_dispersal_rates[habitat_type] = island_dispersal_rate / len(self.dispersal_source_habitat_types)
+            else:
+                habitat_dispersal_rates[habitat_type] = 0.0
         for isl1 in self.islands:
             for isl2 in self.islands:
                 if isl1 is not isl2:
-                    isl1.set_dispersal_rate(isl2, island_dispersal_rate)
-        for isl1 in self.islands:
-            isl1.compile_dispersal_rates()
+                    for habitat_type in self.habitat_types:
+                        isl1.set_dispersal_rate(habitat_type, isl2, habitat_dispersal_rates[habitat_type])
 
         # initialize lineages
         self.seed_habitat = self.dispersal_source_habitat_types[0]
