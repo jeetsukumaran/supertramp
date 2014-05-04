@@ -630,6 +630,7 @@ class System(object):
         for lineage in lineage_splitting_rates:
             total_rate = sum(lineage_splitting_rates[lineage])
             if self.rng.uniform(0, 1) <= total_rate:
+                # print(">>> {}: splitting: {}:{}".format(self.current_gen, lineage, lineage.label))
                 c0, c1 = lineage.diversify(finalize_distribution_label=True)
                 if _DEBUG_MODE:
                     try:
@@ -642,6 +643,7 @@ class System(object):
                         self.rng)
                 # selected_habitat = lineage_split_localities[selected_habitat_idx]
                 for habitat_idx, habitat in enumerate(lineage_splitting_localities[lineage]):
+                    habitat.remove_lineage(lineage)
                     if habitat_idx == selected_habitat_idx:
                         # sympatric speciation: "old" species retained in original habitat on island
                         # new species added to new habitat on island
