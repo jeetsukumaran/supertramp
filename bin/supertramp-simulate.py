@@ -438,10 +438,11 @@ class System(object):
 
     def __init__(self,
             dispersal_model="unconstrained",
-            global_per_lineage_birth_prob=0.01,
-            density_dependent_lineage_birth_model=False,
-            global_per_lineage_death_prob=0.01,
-            density_dependent_lineage_death_model=True,
+            diversification_model_R=-0.5,
+            diversification_model_a=-0.5,
+            diversification_model_b=0.5,
+            diversification_model_s=1.0,
+            diversification_model_e=1.0,
             global_lineage_niche_evolution_probability=0.01,
             global_dispersal_rate=0.01,
             rng=None,
@@ -483,12 +484,11 @@ class System(object):
         self.islands = []
         self.phylogeny = None
 
-        self.global_per_lineage_birth_prob = global_per_lineage_birth_prob
-        self.density_dependent_lineage_birth_model = density_dependent_lineage_birth_model
-        self.single_birth_per_generation = True
-        self.global_per_lineage_death_prob = global_per_lineage_death_prob
-        self.single_death_per_generation = True
-        self.density_dependent_lineage_death_model = density_dependent_lineage_death_model
+        self.diversification_model_R = diversification_model_R
+        self.diversification_model_a = diversification_model_a
+        self.diversification_model_b = diversification_model_b
+        self.diversification_model_s = diversification_model_s
+        self.diversification_model_e = diversification_model_e
         self.global_lineage_niche_evolution_probability = global_lineage_niche_evolution_probability
         self.global_dispersal_rate = global_dispersal_rate
 
@@ -500,6 +500,25 @@ class System(object):
         Habitat.reset_counter()
         Island.reset_counter()
         Lineage.reset_counter()
+
+
+    def poisson_rv(rate):
+        """
+        Returns a random number from a Poisson distribution with rate of
+        `rate` (mean of 1/rate).
+        """
+        MAX_EXPECTATION = 64.0 # larger than this and we have underflow issues
+        if rate > MAX_EXPECTATION:
+            r = rate/2.0
+            return poisson_rv(r) + poisson_rv(r)
+        L = math.exp(-1.0 * rate)
+        p = 1.0
+        k = 0.0
+        while p >= L:
+            k = k + 1.0
+            u = self.rng.random()
+            p = p * u
+        return int(k - 1.0)
 
     def bootstrap(self):
 
@@ -576,14 +595,12 @@ class System(object):
         self.run_diversification()
 
     def run_diversification(self):
-        if self.density_dependent_lineage_birth_model:
-            self.run_density_dependent_birth()
+        if self.rng.uniform(0, 1) <= 0.5:
+            self.run_lineage_birth()
+            self.run_lineage_death()
         else:
-            self.run_simple_birth()
-        if self.density_dependent_lineage_death_model:
-            self.run_density_dependent_death()
-        else:
-            self.run_simple_death()
+            self.run_lineage_death()
+            self.run_lineage_birth()
 
     def _debug_check_habitat_000(self):
         for nd in self.phylogeny:
@@ -598,112 +615,150 @@ class System(object):
                     print(self.phylogeny._as_newick_string())
                 assert str(nd.habitat_types) != "000"
 
-    def run_simple_birth(self):
-        tips = self.phylogeny.leaf_nodes()
-        if not tips:
-            raise TotalExtinctionException()
-        if self.rng.uniform(0, 1) > self.global_per_lineage_birth_prob * len(tips):
-            return
-        lineage_localities = collections.defaultdict(list)
+    def run_lineage_birth(self):
+        lineage_splitting_rates = collections.defaultdict(list)
+        lineage_splitting_localities = collections.defaultdict(list)
         for island in self.islands:
             for habitat in island.habitat_list:
-                for lineage in habitat.lineages:
-                    lineage_localities[lineage].append(habitat)
-        splitting_lineage = self.rng.choice(list(lineage_localities.keys()))
-        c0, c1 = splitting_lineage.diversify(finalize_distribution_label=True)
-        if _DEBUG_MODE:
-            try:
-                self.phylogeny._debug_check_tree()
-            except AttributeError:
-                self.phylogeny.debug_check_tree()
-        if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
-            c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
-        splitting_lineage_localities = lineage_localities[splitting_lineage]
-        assert splitting_lineage_localities
-        if len(splitting_lineage_localities) == 1:
-            target = splitting_lineage_localities[0]
-        else:
-            target = self.rng.choice(splitting_lineage_localities)
-        for habitat in splitting_lineage_localities:
-            habitat.remove_lineage(splitting_lineage)
-            if habitat is target:
-                # sympatric speciation: "old" species retained in original habitat on island
-                # new species added to new habitat on island
-                habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
-                habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
-            else:
-                habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
-
-    def run_density_dependent_birth(self):
-        self.run_simple_birth() # TODO!!!
-
-    def run_simple_death(self):
-        tips = self.phylogeny.leaf_nodes()
-        if not tips:
-            raise TotalExtinctionException()
-        if self.rng.uniform(0, 1) > self.global_per_lineage_death_prob * len(tips):
-            return
-        extinguishing_lineage = self.rng.choice(tips)
-        lineage_localities = []
-        for island in self.islands:
-            for habitat in island.habitat_list:
-                if extinguishing_lineage in habitat.lineages:
-                    lineage_localities.append(habitat)
-        for loc in lineage_localities:
-            loc.remove_lineage(extinguishing_lineage)
-        if extinguishing_lineage is self.phylogeny.seed_node:
-            raise TotalExtinctionException()
-        else:
-            self.phylogeny.prune_subtree(node=extinguishing_lineage,
-                    update_splits=False, delete_outdegree_one=True)
-            if self.phylogeny.seed_node.num_child_nodes() == 0:
-                raise TotalExtinctionException()
-
-    def run_density_dependent_death(self):
-        lineage_counts = collections.Counter()
-        for island in self.islands:
-            for habitat in island.habitat_list:
-                lineage_counts.update(habitat.lineages)
-                n = len(habitat.lineages)
-                if n <= 0:
+                if not habitat.lineages:
                     continue
-                assert habitat.carrying_capacity is not None
-                K = 4 # habitat.carrying_capacity
-                if n > K:
-                    while n > K:
-                        lineage = self.rng.choice(list(habitat.lineages))
-                        habitat.remove_lineage(lineage)
-                        lineage_counts.subtract([lineage])
-                        n -= 1
-                else:
-                    weight = 1.0 - ((K-n)//K)
-                    prob = self.global_per_lineage_death_prob * weight
-                    # print("n={:2d}, K={:2d}, weight={:8.6f}, prob={:8.6f}".format(n, K, weight, prob))
-                    if self.rng.uniform(0, 1) <= prob:
-                        lineage = self.rng.choice(list(habitat.lineages))
-                        habitat.remove_lineage(lineage)
-                        lineage_counts.subtract([lineage])
-        for lineage in lineage_counts:
-            count = lineage_counts[lineage]
-            if count == 0:
-                if lineage is self.phylogeny.seed_node:
-                    raise TotalExtinctionException()
-                else:
-                    self.phylogeny.prune_subtree(node=lineage,
-                            update_splits=False, delete_outdegree_one=True)
-                    if self.phylogeny.seed_node.num_child_nodes() == 0:
-                        raise TotalExtinctionException()
-            elif _DEBUG_MODE:
-                ## sanity checking ...
-                found = True
-                for island in self.islands:
-                    for habitat in island.habitat_list:
-                        if lineage in habitat.lineages:
-                            found = True
-                            break
-                    if found:
-                        break
-                assert found, lineage
+                splitting_rate = self.diversification_model_s * (len(habitat.lineages) ** self.diversification_model_a)
+                for lineage in habitat.lineages:
+                    lineage_splitting_rates[lineage].append(splitting_rate)
+                    lineage_splitting_localities[lineage].append(habitat)
+        to_split_lineage_and_habitat_pairs = []
+        for lineage in lineage_splitting_rates:
+            total_rate = sum(lineage_splitting_rates[lineage])
+            if self.rng.uniform(0, 1) <= total_rate:
+                c0, c1 = lineage.diversify(finalize_distribution_label=True)
+                if _DEBUG_MODE:
+                    try:
+                        self.phylogeny._debug_check_tree()
+                    except AttributeError:
+                        self.phylogeny.debug_check_tree()
+                if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
+                    c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
+                selected_habitat_idx = weighted_index_choice(lineage_splitting_rates[lineage],
+                        self.rng)
+                # selected_habitat = lineage_split_localities[selected_habitat_idx]
+                for habitat_idx, habitat in enumerate(lineage_splitting_localities[lineage]):
+                    if habitat_idx == selected_habitat_idx:
+                        # sympatric speciation: "old" species retained in original habitat on island
+                        # new species added to new habitat on island
+                        habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+                        habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
+                    else:
+                        habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+
+    def run_lineage_death(self):
+        pass
+
+    # def run_simple_birth(self):
+    #     tips = self.phylogeny.leaf_nodes()
+    #     if not tips:
+    #         raise TotalExtinctionException()
+    #     if self.rng.uniform(0, 1) > self.global_per_lineage_birth_prob * len(tips):
+    #         return
+    #     lineage_localities = collections.defaultdict(list)
+    #     for island in self.islands:
+    #         for habitat in island.habitat_list:
+    #             for lineage in habitat.lineages:
+    #                 lineage_localities[lineage].append(habitat)
+    #     splitting_lineage = self.rng.choice(list(lineage_localities.keys()))
+    #     c0, c1 = splitting_lineage.diversify(finalize_distribution_label=True)
+    #     if _DEBUG_MODE:
+    #         try:
+    #             self.phylogeny._debug_check_tree()
+    #         except AttributeError:
+    #             self.phylogeny.debug_check_tree()
+    #     if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
+    #         c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
+    #     splitting_lineage_localities = lineage_localities[splitting_lineage]
+    #     assert splitting_lineage_localities
+    #     if len(splitting_lineage_localities) == 1:
+    #         target = splitting_lineage_localities[0]
+    #     else:
+    #         target = self.rng.choice(splitting_lineage_localities)
+    #     for habitat in splitting_lineage_localities:
+    #         habitat.remove_lineage(splitting_lineage)
+    #         if habitat is target:
+    #             # sympatric speciation: "old" species retained in original habitat on island
+    #             # new species added to new habitat on island
+    #             habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+    #             habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
+    #         else:
+    #             habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+
+    # def run_density_dependent_birth(self):
+    #     self.run_simple_birth() # TODO!!!
+
+    # def run_simple_death(self):
+    #     tips = self.phylogeny.leaf_nodes()
+    #     if not tips:
+    #         raise TotalExtinctionException()
+    #     if self.rng.uniform(0, 1) > self.global_per_lineage_death_prob * len(tips):
+    #         return
+    #     extinguishing_lineage = self.rng.choice(tips)
+    #     lineage_localities = []
+    #     for island in self.islands:
+    #         for habitat in island.habitat_list:
+    #             if extinguishing_lineage in habitat.lineages:
+    #                 lineage_localities.append(habitat)
+    #     for loc in lineage_localities:
+    #         loc.remove_lineage(extinguishing_lineage)
+    #     if extinguishing_lineage is self.phylogeny.seed_node:
+    #         raise TotalExtinctionException()
+    #     else:
+    #         self.phylogeny.prune_subtree(node=extinguishing_lineage,
+    #                 update_splits=False, delete_outdegree_one=True)
+    #         if self.phylogeny.seed_node.num_child_nodes() == 0:
+    #             raise TotalExtinctionException()
+
+    # def run_density_dependent_death(self):
+    #     lineage_counts = collections.Counter()
+    #     for island in self.islands:
+    #         for habitat in island.habitat_list:
+    #             lineage_counts.update(habitat.lineages)
+    #             n = len(habitat.lineages)
+    #             if n <= 0:
+    #                 continue
+    #             assert habitat.carrying_capacity is not None
+    #             K = 4 # habitat.carrying_capacity
+    #             if n > K:
+    #                 while n > K:
+    #                     lineage = self.rng.choice(list(habitat.lineages))
+    #                     habitat.remove_lineage(lineage)
+    #                     lineage_counts.subtract([lineage])
+    #                     n -= 1
+    #             else:
+    #                 weight = 1.0 - ((K-n)//K)
+    #                 prob = self.global_per_lineage_death_prob * weight
+    #                 # print("n={:2d}, K={:2d}, weight={:8.6f}, prob={:8.6f}".format(n, K, weight, prob))
+    #                 if self.rng.uniform(0, 1) <= prob:
+    #                     lineage = self.rng.choice(list(habitat.lineages))
+    #                     habitat.remove_lineage(lineage)
+    #                     lineage_counts.subtract([lineage])
+    #     for lineage in lineage_counts:
+    #         count = lineage_counts[lineage]
+    #         if count == 0:
+    #             if lineage is self.phylogeny.seed_node:
+    #                 raise TotalExtinctionException()
+    #             else:
+    #                 self.phylogeny.prune_subtree(node=lineage,
+    #                         update_splits=False, delete_outdegree_one=True)
+    #                 if self.phylogeny.seed_node.num_child_nodes() == 0:
+    #                     raise TotalExtinctionException()
+    #         elif _DEBUG_MODE:
+    #             ## sanity checking ...
+    #             found = True
+    #             for island in self.islands:
+    #                 for habitat in island.habitat_list:
+    #                     if lineage in habitat.lineages:
+    #                         found = True
+    #                         break
+    #                 if found:
+    #                     break
+    #             assert found, lineage
 
     def report(self):
         # report_prefix = self.output_prefix + ".T{:08}d".format(self.current_gen)
@@ -737,38 +792,33 @@ def main():
             action="store_true",
             default=False,
             help="Run in debugging mode.")
-    simulation_param_options = parser.add_argument_group("Simulation Parameters")
-    simulation_param_options.add_argument("-b", "--birth-probability",
-            dest="global_per_lineage_birth_prob",
-            default=0.01,
+    diversification_param_options = parser.add_argument_group("Diversification Model Parameters")
+    diversification_param_options.add_argument("-R", "--diversification-model-R",
             type=float,
-            help="Global per-lineage birth probability (default = %(default)s).")
-    simulation_param_options.add_argument("-d", "--death-probability",
-            dest="global_per_lineage_death_prob",
-            default=0.00,
+            default=40,
+            help="'R' parameter of the diversfication model (default: %(default)s).")
+    diversification_param_options.add_argument("-a", "--diversification-model-a",
             type=float,
-            help="Global per-lineage death probability (default = %(default)s).")
-    simulation_param_options.add_argument("--fixed-death-rate-model", "--disable-density-dependent-lineage-death-model",
-            dest="density_dependent_lineage_death_model",
-            action="store_false",
-            default=True,
-            help="By default, the lineage extinction follows a density-dependent "
-            "model. Under this default model, once the carrying capacity of "
-            "a habitat is exceeded, lineages will be removed at random until the "
-            "number of lineages equals the carrying capacity, while if the "
-            "carrying capacity of a habitat is not exceeded, lineages will die "
-            "with probability given by the global per-lineage death probability "
-            "multiplied by 1-(n-K)/K, where where 'n' is the number of lineages "
-            "in the habitat and 'K' is the maximum number of lineages (carrying "
-            "capacity) of the habitat. Select this option to replace this default "
-            "of density-dependent lineage death model with a fixed-death rate model "
-            "where the lineage death rate will be fixed to the global per-lineage "
-            "death probability through the course of the simulation.")
-    simulation_param_options.add_argument("-y", "--niche-evolution-probability",
+            default=-0.5,
+            help="'a' parameter of the diversfication model (default: %(default)s).")
+    diversification_param_options.add_argument("-b", "--diversification-model-b",
+            type=float,
+            default=0.5,
+            help="'b' parameter of the diversfication model (default: %(default)s).")
+    diversification_param_options.add_argument("-s", "--diversification-model-s",
+            type=float,
+            default=1.0,
+            help="'s' parameter of the diversfication model (default: %(default)s).")
+    diversification_param_options.add_argument("-e", "--diversification-model-e",
+            type=float,
+            default=1.0,
+            help="'e' parameter of the diversfication model (default: %(default)s).")
+    taxon_cycle_param_options = parser.add_argument_group("Taxon Cycle (Sub-)Model Parameters")
+    taxon_cycle_param_options.add_argument("-y", "--niche-evolution-probability",
             default=0.00,
             type=float,
             help="Lineage (post-splitting) niche evolution probability (default = %(default)s).")
-    simulation_param_options.add_argument("-D", "--dispersal-rate",
+    taxon_cycle_param_options.add_argument("-d", "--dispersal-rate",
             default=0.01,
             type=float,
             help="Dispersal rate (default = %(default)s).")
@@ -804,10 +854,11 @@ def main():
         supertramp_system = System(
                 dispersal_model="unconstrained",
                 random_seed=args.random_seed,
-                global_per_lineage_birth_prob=args.global_per_lineage_birth_prob,
-                density_dependent_lineage_birth_model=args.density_dependent_lineage_birth_model,
-                global_per_lineage_death_prob=args.global_per_lineage_death_prob,
-                density_dependent_lineage_death_model=args.density_dependent_lineage_death_model,
+                diversification_model_R=args.diversification_model_R,
+                diversification_model_a=args.diversification_model_a,
+                diversification_model_b=args.diversification_model_b,
+                diversification_model_s=args.diversification_model_s,
+                diversification_model_e=args.diversification_model_e,
                 global_lineage_niche_evolution_probability=args.niche_evolution_probability,
                 global_dispersal_rate=args.dispersal_rate,
                 rng=rng,
