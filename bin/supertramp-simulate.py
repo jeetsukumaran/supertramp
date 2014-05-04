@@ -660,6 +660,8 @@ class System(object):
                 if n <= 0:
                     continue
                 death_rate = self.diversification_model_e * (len(habitat.lineages) ** self.diversification_model_b)
+                # print(self.diversification_model_e , (len(habitat.lineages) , self.diversification_model_b))
+                # print(death_rate)
                 to_remove = []
                 for lineage in habitat.lineages:
                     if self.rng.uniform(0, 1) <= death_rate:
@@ -759,7 +761,7 @@ class System(object):
     #             if n <= 0:
     #                 continue
     #             assert habitat.carrying_capacity is not None
-    #             K = 4 # habitat.carrying_capacity
+    #             K = habitat.carrying_capacity
     #             if n > K:
     #                 while n > K:
     #                     lineage = self.rng.choice(list(habitat.lineages))
@@ -769,6 +771,7 @@ class System(object):
     #             else:
     #                 weight = 1.0 - ((K-n)//K)
     #                 prob = self.global_per_lineage_death_prob * weight
+    #                 prob = self.diversification_model_s * (len(habitat.lineages) ** self.diversification_model_a)
     #                 # print("n={:2d}, K={:2d}, weight={:8.6f}, prob={:8.6f}".format(n, K, weight, prob))
     #                 if self.rng.uniform(0, 1) <= prob:
     #                     lineage = self.rng.choice(list(habitat.lineages))
@@ -843,11 +846,11 @@ def main():
             help="'b' parameter of the diversfication model (default: %(default)s).")
     diversification_param_options.add_argument("-s", "--diversification-model-s",
             type=float,
-            default=1.0,
+            default=0.10,
             help="'s' parameter of the diversfication model (default: %(default)s).")
     diversification_param_options.add_argument("-e", "--diversification-model-e",
             type=float,
-            default=1.0,
+            default=0.01,
             help="'e' parameter of the diversfication model (default: %(default)s).")
     taxon_cycle_param_options = parser.add_argument_group("Taxon Cycle (Sub-)Model Parameters")
     taxon_cycle_param_options.add_argument("-y", "--niche-evolution-probability",
