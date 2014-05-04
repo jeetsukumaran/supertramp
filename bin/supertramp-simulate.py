@@ -626,7 +626,6 @@ class System(object):
                 for lineage in habitat.lineages:
                     lineage_splitting_rates[lineage].append(splitting_rate)
                     lineage_splitting_localities[lineage].append(habitat)
-        to_split_lineage_and_habitat_pairs = []
         for lineage in lineage_splitting_rates:
             total_rate = sum(lineage_splitting_rates[lineage])
             if self.rng.uniform(0, 1) <= total_rate:
@@ -653,7 +652,42 @@ class System(object):
                         habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
 
     def run_lineage_death(self):
-        pass
+        lineage_counts = collections.Counter()
+        for island in self.islands:
+            for habitat in island.habitat_list:
+                lineage_counts.update(habitat.lineages)
+                n = len(habitat.lineages)
+                if n <= 0:
+                    continue
+                death_rate = self.diversification_model_e * (len(habitat.lineages) ** self.diversification_model_b)
+                to_remove = []
+                for lineage in habitat.lineages:
+                    if self.rng.uniform(0, 1) <= death_rate:
+                        to_remove.append(lineage)
+                for lineage in to_remove:
+                    habitat.remove_lineage(lineage)
+                    lineage_counts.subtract([lineage])
+        for lineage in lineage_counts:
+            count = lineage_counts[lineage]
+            if count == 0:
+                if lineage is self.phylogeny.seed_node:
+                    raise TotalExtinctionException()
+                else:
+                    self.phylogeny.prune_subtree(node=lineage,
+                            update_splits=False, delete_outdegree_one=True)
+                    if self.phylogeny.seed_node.num_child_nodes() == 0:
+                        raise TotalExtinctionException()
+            elif _DEBUG_MODE:
+                ## sanity checking ...
+                found = True
+                for island in self.islands:
+                    for habitat in island.habitat_list:
+                        if lineage in habitat.lineages:
+                            found = True
+                            break
+                    if found:
+                        break
+                assert found, lineage
 
     # def run_simple_birth(self):
     #     tips = self.phylogeny.leaf_nodes()
