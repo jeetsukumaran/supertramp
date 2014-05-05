@@ -41,9 +41,6 @@ def main():
     parser = argparse.ArgumentParser(description="Biogeographical simulator")
 
     run_options = parser.add_argument_group("Run Options")
-    run_options.add_argument("dispersal_model",
-            choices=["constrained", "unconstrained"],
-            help="Dispersal model: constrained or unconstrained by habitat")
     run_options.add_argument("-z", "--random-seed",
             default=None,
             help="Seed for random number generator engine.")
@@ -59,6 +56,15 @@ def main():
             action="store_true",
             default=False,
             help="Run in debugging mode.")
+    landscape_options = parser.add_argument_group("Landscape Options")
+    landscape_options.add_argument("--num-islands",
+            type=int,
+            default=4,
+            help="number of islands (default = %(default)s).")
+    landscape_options.add_argument("--num-habitat-types",
+            type=int,
+            default=4,
+            help="number of habitat types per island (default = %(default)s).")
     diversification_param_options = parser.add_argument_group("Diversification Model Parameters")
     diversification_param_options.add_argument("-a", "--diversification-model-a",
             type=float,
@@ -70,21 +76,26 @@ def main():
             help="'b' parameter of the diversfication model (default: %(default)s).")
     diversification_param_options.add_argument("-s", "--diversification-model-s0",
             type=float,
-            default=0.10,
+            default=0.40,
             help="'s' parameter of the diversfication model (default: %(default)s).")
     diversification_param_options.add_argument("-e", "--diversification-model-e0",
             type=float,
             default=0.01,
             help="'e' parameter of the diversfication model (default: %(default)s).")
     taxon_cycle_param_options = parser.add_argument_group("Taxon Cycle (Sub-)Model Parameters")
-    taxon_cycle_param_options.add_argument("-y", "--niche-evolution-probability",
-            default=0.01,
-            type=float,
-            help="Lineage (post-splitting) niche evolution probability (default = %(default)s).")
+    taxon_cycle_param_options.add_argument("--dispersal_model",
+            type=str,
+            default="unconstrained",
+            choices=["constrained", "unconstrained"],
+            help="Dispersal model: constrained or unconstrained by habitat")
     taxon_cycle_param_options.add_argument("-d", "--dispersal-rate",
             default=0.01,
             type=float,
             help="Dispersal rate (default = %(default)s).")
+    taxon_cycle_param_options.add_argument("-y", "--niche-evolution-probability",
+            default=0.01,
+            type=float,
+            help="Lineage (post-splitting) niche evolution probability (default = %(default)s).")
     termination_condition_options = parser.add_argument_group("Termination Condition Options")
     termination_condition_options.add_argument("--ngens",
             type=int,

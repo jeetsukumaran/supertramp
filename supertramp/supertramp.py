@@ -586,7 +586,10 @@ class System(object):
             self.dispersal_source_habitat_types = [self.habitat_types[0]]
 
         # sum of rates of dispersing out of any island == global dispersal rate
-        island_dispersal_rate = float(self.global_dispersal_rate) / ((len(self.islands) ** 2) - 1)
+        if len(self.islands) <= 1:
+            island_dispersal_rate = 0
+        else:
+            island_dispersal_rate = float(self.global_dispersal_rate) / ((len(self.islands) ** 2) - 1)
         habitat_dispersal_rates = {}
         for idx, habitat_type in enumerate(self.habitat_types):
             if habitat_type in self.dispersal_source_habitat_types:
@@ -677,7 +680,7 @@ class System(object):
                         self.phylogeny._debug_check_tree()
                     except AttributeError:
                         self.phylogeny.debug_check_tree()
-                if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
+                if len(self.habitat_types) > 1 and self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
                     c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
                 selected_habitat_idx = weighted_index_choice(lineage_splitting_rates[lineage],
                         self.rng)
