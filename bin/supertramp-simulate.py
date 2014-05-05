@@ -119,8 +119,10 @@ def main():
     configd["rng"] = random.Random(random_seed)
     configd["tree_log"] = open(configd["output_prefix"] + ".trees",
             "w")
-    configd["stats_log"] = open(configd["output_prefix"] + ".stats.txt",
+    configd["general_stats_log"] = open(configd["output_prefix"] + ".general_stats.txt",
             "w")
+    configd["general_stats_log"].header_written = False
+    header_written = False
     rep = 0
     while rep < nreps:
         simulation_name="Run{}".format((rep+1))

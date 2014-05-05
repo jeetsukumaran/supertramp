@@ -458,10 +458,10 @@ class System(object):
             self.tree_log = open(self.output_prefix + ".trees", "w")
         self.run_logger.info("Tree log filepath: {}".format(self.tree_log.name))
 
-        self.stats_log = configd.pop("stats_log", None)
-        if self.stats_log is None:
-            self.stats_log = open(self.output_prefix + ".trees", "w")
-        self.run_logger.info("Statistics log filepath: {}".format(self.stats_log.name))
+        self.general_stats_log = configd.pop("general_stats_log", None)
+        if self.general_stats_log is None:
+            self.general_stats_log = open(self.output_prefix + ".trees", "w")
+        self.run_logger.info("Statistics log filepath: {}".format(self.general_stats_log.name))
 
         self.rng = configd.pop("rng", None)
         if self.rng is None:
@@ -840,8 +840,7 @@ class System(object):
     #                     break
     #             assert found, lineage
 
-    def report(self):
-        # report_prefix = self.output_prefix + ".T{:08}d".format(self.current_gen)
+    def report_trees(self):
         self.tree_log.write("[&R][simulation={},generation={}]".format(self.name, self.current_gen))
         try:
             self.tree_log.write(self.phylogeny._as_newick_string())
@@ -849,4 +848,83 @@ class System(object):
             self.tree_log.write(self.phylogeny.as_newick_string())
         self.tree_log.write(";\n")
         self.tree_log.flush()
+
+    def write_general_stats_header(self, out):
+        header = []
+        header.append("name")
+        header.append("generation")
+        for island in self.islands:
+            # number of lineages per island, across all habitats in island i
+            header.append("island.{}.richness".format(island.label))
+        for habitat_type in self.habitat_types:
+            # number of lineages per habitat type, across all islands for each island i, I_{i}
+            header.append("habitat.type.{}.richness".format(habitat_type.label))
+        for island_idx, island in enumerate(self.islands):
+            for habitat_type_idx, habitat in enumerate(island.habitat_list):
+                # number of lineage in each habitat j of each island i, H_{i,j}
+                header.append("{}.{}.richness".format(island.label, habitat.habitat_type.label))
+        # mean number of lineages per island, across all habitat types
+        header.append("mean.island.richness")
+        # mean number of lineages per habitat type, across all islands
+        header.append("mean.habitat.type.richness")
+        # mean number of lineages per habitat, across all habitat types and islands
+        header.append("mean.habitat.richness")
+        header = "\t".join(header)
+        out.write("{}\n".format(header))
+        out.flush()
+
+    def write_general_stats(self, out):
+        island_habitat_richness = collections.OrderedDict()
+        island_lineages = collections.defaultdict(set)
+        habitat_type_lineages = collections.defaultdict(set)
+        num_habitats_counted = 0
+        sum_of_richness_in_each_habitat = 0
+        for island in self.islands:
+            for habitat in island.habitat_list:
+                n = len(habitat.lineages)
+                island_habitat_richness[ (island, habitat) ] = n
+                island_lineages[island].update(habitat.lineages)
+                habitat_type_lineages[habitat.habitat_type].update(habitat.lineages)
+                sum_of_richness_in_each_habitat += n
+                num_habitats_counted += 1
+        island_richness = collections.OrderedDict()
+        for island in self.islands:
+            island_richness[island] = len(island_lineages[island])
+        mean_island_richness = sum(island_richness.values())/len(island_richness)
+        habitat_type_richness = collections.OrderedDict()
+        for habitat_type in self.habitat_types:
+            habitat_type_richness[habitat_type] = len(habitat_type_lineages[habitat_type])
+        mean_habitat_type_richness = sum(habitat_type_richness.values())/len(habitat_type_richness)
+        mean_habitat_richness = sum_of_richness_in_each_habitat/num_habitats_counted
+
+        int_template = "{}"
+        float_template = "{}"
+        stat_values = collections.OrderedDict()
+        stat_values["name"] = self.name
+        stat_values["generation"] = int_template.format(self.current_gen)
+        for island in self.islands:
+            stat_values["island.{}.richness".format(island.label)] = int_template.format(island_richness[island])
+        for habitat_type in self.habitat_types:
+            stat_values["habitat.type.{}.richness".format(habitat_type.label)] = int_template.format(habitat_type_richness[habitat_type])
+        for island_idx, island in enumerate(self.islands):
+            for habitat_type_idx, habitat in enumerate(island.habitat_list):
+                stat_values["{}.{}.richness".format(island.label, habitat.habitat_type.label)] = int_template.format(island_habitat_richness[ (island, habitat) ])
+        stat_values["mean.island.richness"] = float_template.format(mean_island_richness)
+        stat_values["mean.habitat_type.richness"] = float_template.format(mean_habitat_type_richness)
+        stat_values["mean.habitat.richness"] = float_template.format(mean_habitat_richness)
+
+        values = stat_values.values()
+        out.write("\t".join(values))
+        out.write("\n")
+
+    def report_general_stats(self):
+        if not hasattr(self.general_stats_log, "header_written") or not self.general_stats_log.header_written:
+            self.write_general_stats_header(self.general_stats_log)
+            self.general_stats_log.header_written = True
+        self.write_general_stats(self.general_stats_log)
+
+    def report(self):
+        self.report_trees()
+        self.report_general_stats()
+
 
