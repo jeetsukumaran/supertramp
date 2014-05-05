@@ -68,18 +68,23 @@ def main():
     # birth_rates = [0.001, 0.0001, 0.00001]
     # dispersal_rate_factors = [0.01, 0.5, 1.0, 2.0, 10.0]
     # niche_evolution_probs = [0.001, 0.01, 0.10, 1.0]
-    birth_rates = [0.01, 0.001, 0.0001]
-    dispersal_rate_factors = [0.1, 1.0, 10.0]
+
+    # Expected equilibirum species richness, per habitat (per island): 10(30), 20(60), 40(120)
+    diversification_model_s0e0 = [ (0.1, 0.01), (0.2, 0.01), (0.4, 0.01)]
+
+    dispersal_rates = [0.01, 0.1, 1.0, 10.0]
     niche_evolution_probs = [0.01, 0.10, 1.0]
+
     run_manifest = {}
     for dm_idx, dispersal_model in enumerate(dispersal_models):
-        for br_idx, birth_rate in enumerate(birth_rates):
-            for drf_idx, dispersal_rate_factor in enumerate(dispersal_rate_factors):
+        for br_idx, (s0,e0) in enumerate(diversification_model_s0e0):
+            for drf_idx, dispersal_rate in enumerate(dispersal_rates):
                 for nef_idx, niche_evolution_prob in enumerate(niche_evolution_probs):
-                    dispersal_rate = dispersal_rate_factor * birth_rate
-                    stem = "{dispersal_model}_b{birth_rate:6.5f}_r{dispersal_rate:6.5f}_n{niche_evolution_prob:6.5f}".format(
+                    stem = "{dispersal_model}_s{s0:6.5f}_e{e0:6.5f}_r{dispersal_rate:6.5f}_n{niche_evolution_prob:6.5f}".format(
                             dispersal_model=dispersal_model,
-                            birth_rate=birth_rate,
+                            s0=s0,
+                            e0=e0,
+                            R=s0/e0,
                             dispersal_rate=dispersal_rate,
                             niche_evolution_prob=niche_evolution_prob)
                     output_prefix = stem
@@ -88,8 +93,8 @@ def main():
                     run_cmd.extend(["-z", str(rng.randint(0, sys.maxsize))])
                     run_cmd.extend(["--nreps", str(args.nreps)])
                     run_cmd.extend(["--log-frequency", "1000"])
-                    run_cmd.extend(["--birth-probability", str(birth_rate)])
-                    run_cmd.extend(["--death-probability", "0"])
+                    run_cmd.extend(["-s", str(s0)])
+                    run_cmd.extend(["-e", str(e0)])
                     run_cmd.extend(["--niche-evolution-probability", str(niche_evolution_prob)])
                     run_cmd.extend(["--dispersal-rate", str(dispersal_rate)])
                     run_cmd.extend(["--ngens", str(args.ngens)])
@@ -106,8 +111,8 @@ def main():
                         jobf.write(template.format(commands="\n".join(commands)))
                     run_manifest[output_prefix] = {
                             "dispersal_model"       : dispersal_model,
-                            "birth_rate"            : birth_rate,
-                            "dispersal_rate_factor" : dispersal_rate_factor,
+                            "s0"                    : s0,
+                            "e0"                    : e0,
                             "dispersal_rate"        : dispersal_rate,
                             "niche_evolution_prob"  : niche_evolution_prob,
                             "treefile"              : output_prefix + ".trees",
