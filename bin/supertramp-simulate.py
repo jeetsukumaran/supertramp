@@ -124,7 +124,7 @@ def main():
         while not success:
             try:
                 success = supertramp_system.run(ngens)
-            except TotalExtinctionException:
+            except supertramp.TotalExtinctionException:
                 configd["run_logger"].info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, nreps, supertramp_system.current_gen))
                 configd["run_logger"].info("Run {} of {}: restarting".format(rep+1, nreps))
             else:
