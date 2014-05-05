@@ -442,8 +442,8 @@ class System(object):
         # diversification_model_R=-0.5,
         # diversification_model_a=-0.5,
         # diversification_model_b=0.5,
-        # diversification_model_s=1.0,
-        # diversification_model_e=1.0,
+        # diversification_model_s0=1.0,
+        # diversification_model_e0=1.0,
         # global_lineage_niche_evolution_probability=0.01,
         # global_dispersal_rate=0.01,
         # rng=None,
@@ -466,6 +466,7 @@ class System(object):
         self.tree_log = configd.pop("tree_log", None)
         if self.tree_log is None:
             self.tree_log = open(self.output_prefix + ".trees", "w")
+        self.run_logger.info("Tree log filepath: {}".format(self.tree_log.name))
 
         self.rng = configd.pop("rng", None)
         if self.rng is None:
@@ -491,27 +492,41 @@ class System(object):
             if num_islands in configd and num_islands != len(self.island_labels):
                 raise ValueError("Number of islands requested ({}) does not match number of islands specified ({})".format(
                     configd["num_islands"], len(self.island_labels)))
+        self.run_logger.info("Configuring {} islands: {}".format(
+            len(self.island_labels), self.island_labels))
 
         self.habitat_type_labels = configd.pop("habitat_type_labels", None)
         if self.habitat_type_labels is None:
-            num_habitat_types = configd.pop("num_habitat_types", 4)
+            num_habitat_types = configd.pop("num_habitat_types", 3)
             self.habitat_type_labels = []
             for i in range(num_habitat_types):
-                label = "I{}".format(i+1)
+                label = "H{}".format(i+1)
                 self.habitat_type_labels.append(label)
         else:
             if num_habitat_types in configd and num_habitat_types != len(self.habitat_type_labels):
                 raise ValueError("Number of habitat_types requested ({}) does not match number of habitat_types specified ({})".format(
                     configd["num_habitat_types"], len(self.habitat_type_labels)))
+        self.run_logger.info("Configuring {} habitat types per island: {}".format(
+            len(self.habitat_type_labels), self.habitat_type_labels))
+
 
         self.dispersal_model = configd.pop("dispersal_model", "unconstrained")
+        self.run_logger.info("Dispersal model category: '{}'".format(self.dispersal_model))
+        self.global_dispersal_rate = configd.pop("dispersal_rate", 0.01)
+        self.run_logger.info("Dispersal rate, d: {}".format(self.global_dispersal_rate))
 
         self.diversification_model_a = configd.pop("diversification_model_a", -0.5)
+        self.run_logger.info("Diversification model, a: {}".format(self.diversification_model_a))
         self.diversification_model_b = configd.pop("diversification_model_b", 0.5)
-        self.diversification_model_s = configd.pop("diversification_model_s", 0.1)
-        self.diversification_model_e = configd.pop("diversification_model_e", 0.001)
+        self.run_logger.info("Diversification model, b: {}".format(self.diversification_model_b))
+        self.diversification_model_s0 = configd.pop("diversification_model_s0", 0.1)
+        self.run_logger.info("Diversification model, s0: {}".format(self.diversification_model_s0))
+        self.diversification_model_e0 = configd.pop("diversification_model_e0", 0.001)
+        self.run_logger.info("Diversification model, e0: {}".format(self.diversification_model_e0))
+        self.run_logger.info("Projected habitat species richness (s0/e0): {}".format(self.diversification_model_s0/self.diversification_model_e0))
+
         self.global_lineage_niche_evolution_probability = configd.pop("niche_evolution_probability", 0.01)
-        self.global_dispersal_rate = configd.pop("dispersal_rate", 0.01)
+        self.run_logger.info("Niche evolution probability: {}".format(self.global_lineage_niche_evolution_probability))
 
         self.log_frequency = configd.pop("log_frequency", 1000)
 
@@ -648,7 +663,7 @@ class System(object):
             for habitat in island.habitat_list:
                 if not habitat.lineages:
                     continue
-                splitting_rate = self.diversification_model_s * (len(habitat.lineages) ** self.diversification_model_a)
+                splitting_rate = self.diversification_model_s0 * (len(habitat.lineages) ** self.diversification_model_a)
                 for lineage in habitat.lineages:
                     lineage_splitting_rates[lineage].append(splitting_rate)
                     lineage_splitting_localities[lineage].append(habitat)
@@ -685,8 +700,8 @@ class System(object):
                 n = len(habitat.lineages)
                 if n <= 0:
                     continue
-                death_rate = self.diversification_model_e * (len(habitat.lineages) ** self.diversification_model_b)
-                # print(self.diversification_model_e , (len(habitat.lineages) , self.diversification_model_b))
+                death_rate = self.diversification_model_e0 * (len(habitat.lineages) ** self.diversification_model_b)
+                # print(self.diversification_model_e0 , (len(habitat.lineages) , self.diversification_model_b))
                 # print(death_rate)
                 to_remove = []
                 for lineage in habitat.lineages:
@@ -797,7 +812,7 @@ class System(object):
     #             else:
     #                 weight = 1.0 - ((K-n)//K)
     #                 prob = self.global_per_lineage_death_prob * weight
-    #                 prob = self.diversification_model_s * (len(habitat.lineages) ** self.diversification_model_a)
+    #                 prob = self.diversification_model_s0 * (len(habitat.lineages) ** self.diversification_model_a)
     #                 # print("n={:2d}, K={:2d}, weight={:8.6f}, prob={:8.6f}".format(n, K, weight, prob))
     #                 if self.rng.uniform(0, 1) <= prob:
     #                     lineage = self.rng.choice(list(habitat.lineages))
@@ -866,11 +881,11 @@ def main():
             type=float,
             default=0.5,
             help="'b' parameter of the diversfication model (default: %(default)s).")
-    diversification_param_options.add_argument("-s", "--diversification-model-s",
+    diversification_param_options.add_argument("-s", "--diversification-model-s0",
             type=float,
             default=0.10,
             help="'s' parameter of the diversfication model (default: %(default)s).")
-    diversification_param_options.add_argument("-e", "--diversification-model-e",
+    diversification_param_options.add_argument("-e", "--diversification-model-e0",
             type=float,
             default=0.01,
             help="'e' parameter of the diversfication model (default: %(default)s).")
@@ -902,7 +917,9 @@ def main():
     _DEBUG_MODE = argsd.pop("debug_mode")
     nreps = argsd.pop("nreps")
     ngens = argsd.pop("ngens")
-    random_seed = argsd.pop("random_seed", random.randint(0, sys.maxsize))
+    random_seed = argsd.pop("random_seed", None)
+    if random_seed is None:
+        random_seed = random.randint(0, sys.maxsize)
 
     configd = dict(argsd)
     configd["run_logger"] = RunLogger(name="supertramp", log_path=args.output_prefix + ".log")
