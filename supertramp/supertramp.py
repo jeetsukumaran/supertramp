@@ -437,20 +437,6 @@ class TotalExtinctionException(Exception):
 class System(object):
 
     def __init__(self, **kwargs):
-        # dispersal_model="unconstrained",
-        # diversification_model_R=-0.5,
-        # diversification_model_a=-0.5,
-        # diversification_model_b=0.5,
-        # diversification_model_s0=1.0,
-        # diversification_model_e0=1.0,
-        # global_lineage_niche_evolution_probability=0.01,
-        # global_dispersal_rate=0.01,
-        # rng=None,
-        # output_prefix=None,
-        # tree_log=None,
-        # random_seed=None,
-        # logger=None,
-        # log_frequency=100,
         self.configure(kwargs)
 
     def configure(self, configd):
@@ -462,10 +448,20 @@ class System(object):
             self.run_logger = RunLogger(name="supertramp",
                     log_path=self.output_prefix + ".log")
 
+        self.name = configd.pop("name", None)
+        if self.name is None:
+            self.name = str(id(self))
+        self.run_logger.info("Configuring simulation '{}'".format(self.name))
+
         self.tree_log = configd.pop("tree_log", None)
         if self.tree_log is None:
             self.tree_log = open(self.output_prefix + ".trees", "w")
         self.run_logger.info("Tree log filepath: {}".format(self.tree_log.name))
+
+        self.stats_log = configd.pop("stats_log", None)
+        if self.stats_log is None:
+            self.stats_log = open(self.output_prefix + ".trees", "w")
+        self.run_logger.info("Statistics log filepath: {}".format(self.stats_log.name))
 
         self.rng = configd.pop("rng", None)
         if self.rng is None:
@@ -528,6 +524,7 @@ class System(object):
         self.run_logger.info("Niche evolution probability: {}".format(self.global_lineage_niche_evolution_probability))
 
         self.log_frequency = configd.pop("log_frequency", 1000)
+        self.report_frequency = configd.pop("report_frequency", None)
 
         if configd:
             raise TypeError("Unsupported configuration keywords: {}".format(configd))
@@ -620,6 +617,10 @@ class System(object):
 
     def run(self, ngens, repeat_on_total_extinction=True):
         for x in range(ngens):
+            if ( (self.report_frequency is not None)
+                and ( (self.current_gen % self.report_frequency) == 0 )
+                ):
+                self.report()
             self.execute_life_cycle()
         return True
 
@@ -841,7 +842,7 @@ class System(object):
 
     def report(self):
         # report_prefix = self.output_prefix + ".T{:08}d".format(self.current_gen)
-        self.tree_log.write("[&R] ")
+        self.tree_log.write("[&R][simulation={},generation={}]".format(self.name, self.current_gen))
         try:
             self.tree_log.write(self.phylogeny._as_newick_string())
         except AttributeError:

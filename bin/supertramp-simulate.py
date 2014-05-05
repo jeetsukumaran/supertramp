@@ -98,6 +98,10 @@ def main():
         default='supertramp_run',
         metavar='OUTPUT-FILE-PREFIX',
         help="Prefix for output files (default='%(default)s').")
+    output_options.add_argument("-r", "--report-frequency",
+            default=None,
+            type=int,
+            help="Frequency that data is sampled from the simulation (default = None [final report only]).")
     args = parser.parse_args()
     argsd = vars(args)
 
@@ -109,16 +113,22 @@ def main():
         random_seed = random.randint(0, sys.maxsize)
 
     configd = dict(argsd)
-    configd["run_logger"] = supertramp.RunLogger(name="supertramp", log_path=args.output_prefix + ".log")
+    configd["run_logger"] = supertramp.RunLogger(name="supertramp",
+            log_path=args.output_prefix + ".log")
     configd["run_logger"].info("Initializing with random seed: {}".format(random_seed))
     configd["rng"] = random.Random(random_seed)
-    configd["tree_log"] = open(configd["output_prefix"] + ".trees", "w")
-
+    configd["tree_log"] = open(configd["output_prefix"] + ".trees",
+            "w")
+    configd["stats_log"] = open(configd["output_prefix"] + ".stats.txt",
+            "w")
     rep = 0
     while rep < nreps:
+        simulation_name="Run{}".format((rep+1))
         run_output_prefix = "{}.R{:04d}".format(configd["output_prefix"], rep+1)
         configd["run_logger"].info("Run {} of {}: starting".format(rep+1, nreps))
-        supertramp_system = supertramp.System(**configd)
+        supertramp_system = supertramp.System(
+                name=simulation_name,
+                **configd)
         supertramp_system.bootstrap()
         success = False
         while not success:
@@ -127,6 +137,10 @@ def main():
             except supertramp.TotalExtinctionException:
                 configd["run_logger"].info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, nreps, supertramp_system.current_gen))
                 configd["run_logger"].info("Run {} of {}: restarting".format(rep+1, nreps))
+                supertramp_system = supertramp.System(
+                        name=simulation_name,
+                        **configd)
+                supertramp_system.bootstrap()
             else:
                 configd["run_logger"].info("Run {} of {}: completed to termination condition of {} generations".format(rep+1, nreps, ngens))
                 supertramp_system.report()
