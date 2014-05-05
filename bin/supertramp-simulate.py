@@ -41,6 +41,7 @@ import random
 import logging
 import collections
 import inspect
+import json
 from supertramp.BitVector import BitVector
 import dendropy
 
@@ -436,71 +437,98 @@ class TotalExtinctionException(Exception):
 
 class System(object):
 
-    def __init__(self,
-            dispersal_model="unconstrained",
-            diversification_model_R=-0.5,
-            diversification_model_a=-0.5,
-            diversification_model_b=0.5,
-            diversification_model_s=1.0,
-            diversification_model_e=1.0,
-            global_lineage_niche_evolution_probability=0.01,
-            global_dispersal_rate=0.01,
-            rng=None,
-            output_prefix=None,
-            tree_log=None,
-            random_seed=None,
-            logger=None,
-            log_frequency=100,
-            ):
-        if output_prefix is None:
-            self.output_prefix = "supertramp"
-        else:
-            self.output_prefix = output_prefix
-        if logger is None:
-            self.logger = RunLogger(name="supertramp",
+    def __init__(self, **kwargs):
+        # dispersal_model="unconstrained",
+        # diversification_model_R=-0.5,
+        # diversification_model_a=-0.5,
+        # diversification_model_b=0.5,
+        # diversification_model_s=1.0,
+        # diversification_model_e=1.0,
+        # global_lineage_niche_evolution_probability=0.01,
+        # global_dispersal_rate=0.01,
+        # rng=None,
+        # output_prefix=None,
+        # tree_log=None,
+        # random_seed=None,
+        # logger=None,
+        # log_frequency=100,
+        self.configure(kwargs)
+
+    def configure(self, configd):
+
+        self.output_prefix = configd.pop("output_prefix", "supertramp")
+
+        self.run_logger = configd.pop("run_logger", None)
+        if self.run_logger is None:
+            self.run_logger = RunLogger(name="supertramp",
                     log_path=self.output_prefix + ".log")
-        else:
-            self.logger = logger
-        if tree_log is None:
+
+        self.tree_log = configd.pop("tree_log", None)
+        if self.tree_log is None:
             self.tree_log = open(self.output_prefix + ".trees", "w")
-        else:
-            self.tree_log = tree_log
-        if rng is None:
-            if random_seed is None:
+
+        self.rng = configd.pop("rng", None)
+        if self.rng is None:
+            self.random_seed = configd.pop("random_seed", None)
+            if self.random_seed is None:
                 self.random_seed = random.randint(0, sys.maxsize)
-            else:
-                self.random_seed = random_seed
-            self.logger.info("Initializing with random seed {}".format(self.random_seed))
+            self.run_logger.info("Initializing with random seed {}".format(self.random_seed))
             # self.rng = numpy.random.RandomState(seed=[self.random_seed])
             self.rng = random.Random(self.random_seed)
         else:
-            self.rng = rng
+            if "random_seed" in configd:
+                raise TypeError("Cannot specify both 'rng' and 'random_seed'")
+            self.run_logger.info("Using existing random number generator")
 
-        self.island_labels = ["A", "B", "C", "D"]
-        self.habitat_type_labels = ["coastal", "interior", "deep"]
-        self.island_habitat_carrying_capacity = 10
-        self.dispersal_model = dispersal_model
-        self.habitat_types = []
-        self.islands = []
-        self.phylogeny = None
+        self.island_labels = configd.pop("island_labels", None)
+        if self.island_labels is None:
+            self.island_labels = []
+            num_islands = configd.pop("num_islands", 4)
+            for i in range(num_islands):
+                label = "I{}".format(i+1)
+                self.island_labels.append(label)
+        else:
+            if num_islands in configd and num_islands != len(self.island_labels):
+                raise ValueError("Number of islands requested ({}) does not match number of islands specified ({})".format(
+                    configd["num_islands"], len(self.island_labels)))
 
-        self.diversification_model_R = diversification_model_R
-        self.diversification_model_a = diversification_model_a
-        self.diversification_model_b = diversification_model_b
-        self.diversification_model_s = diversification_model_s
-        self.diversification_model_e = diversification_model_e
-        self.global_lineage_niche_evolution_probability = global_lineage_niche_evolution_probability
-        self.global_dispersal_rate = global_dispersal_rate
+        self.habitat_type_labels = configd.pop("habitat_type_labels", None)
+        if self.habitat_type_labels is None:
+            num_habitat_types = configd.pop("num_habitat_types", 4)
+            self.habitat_type_labels = []
+            for i in range(num_habitat_types):
+                label = "I{}".format(i+1)
+                self.habitat_type_labels.append(label)
+        else:
+            if num_habitat_types in configd and num_habitat_types != len(self.habitat_type_labels):
+                raise ValueError("Number of habitat_types requested ({}) does not match number of habitat_types specified ({})".format(
+                    configd["num_habitat_types"], len(self.habitat_type_labels)))
 
-        self.current_gen = 0
-        self.log_frequency = log_frequency
+        self.dispersal_model = configd.pop("dispersal_model", "unconstrained")
+
+        self.diversification_model_a = configd.pop("diversification_model_a", -0.5)
+        self.diversification_model_b = configd.pop("diversification_model_b", 0.5)
+        self.diversification_model_s = configd.pop("diversification_model_s", 0.1)
+        self.diversification_model_e = configd.pop("diversification_model_e", 0.001)
+        self.global_lineage_niche_evolution_probability = configd.pop("niche_evolution_probability", 0.01)
+        self.global_dispersal_rate = configd.pop("dispersal_rate", 0.01)
+
+        self.log_frequency = configd.pop("log_frequency", 1000)
+
+        if configd:
+            raise TypeError("Unsupported configuration keywords: {}".format(configd))
+
+        self.reset_system_globals()
 
     def reset_system_globals(self):
         HabitatType.reset_counter()
         Habitat.reset_counter()
         Island.reset_counter()
         Lineage.reset_counter()
-
+        self.current_gen = 0
+        self.habitat_types = []
+        self.islands = []
+        self.phylogeny = None
 
     def poisson_rv(rate):
         """
@@ -532,13 +560,11 @@ class System(object):
         self.all_habitat_types_bitmask = (1 << len(self.habitat_types)) - 1
 
         # create islands
-        cc = [self.island_habitat_carrying_capacity] * len(self.habitat_types)
         for island_label in self.island_labels:
             island = Island(
                     rng=self.rng,
                     label=island_label,
-                    habitat_types=self.habitat_types,
-                    habitat_carrying_capacities=cc)
+                    habitat_types=self.habitat_types)
             self.islands.append(island)
         self.all_islands_bitmask = (1 << len(self.islands)) - 1
 
@@ -587,7 +613,7 @@ class System(object):
         self.current_gen += 1
         self.phylogeny.add_age_to_tips(1)
         if self.current_gen % self.log_frequency == 0:
-            self.logger.info("Executing life-cycle {}".format(self.current_gen))
+            self.run_logger.info("Executing life-cycle {}".format(self.current_gen))
         for island in self.islands:
             island.run_dispersals()
         for island in self.islands:
@@ -832,10 +858,6 @@ def main():
             default=False,
             help="Run in debugging mode.")
     diversification_param_options = parser.add_argument_group("Diversification Model Parameters")
-    diversification_param_options.add_argument("-R", "--diversification-model-R",
-            type=float,
-            default=40,
-            help="'R' parameter of the diversfication model (default: %(default)s).")
     diversification_param_options.add_argument("-a", "--diversification-model-a",
             type=float,
             default=-0.5,
@@ -854,7 +876,7 @@ def main():
             help="'e' parameter of the diversfication model (default: %(default)s).")
     taxon_cycle_param_options = parser.add_argument_group("Taxon Cycle (Sub-)Model Parameters")
     taxon_cycle_param_options.add_argument("-y", "--niche-evolution-probability",
-            default=0.00,
+            default=0.01,
             type=float,
             help="Lineage (post-splitting) niche evolution probability (default = %(default)s).")
     taxon_cycle_param_options.add_argument("-d", "--dispersal-rate",
@@ -875,46 +897,34 @@ def main():
         metavar='OUTPUT-FILE-PREFIX',
         help="Prefix for output files (default='%(default)s').")
     args = parser.parse_args()
+    argsd = vars(args)
 
-    _DEBUG_MODE = args.debug_mode
-    logger = RunLogger(name="supertramp",
-            log_path=args.output_prefix + ".log")
-    if args.random_seed is None:
-        args.random_seed = random.randint(0, sys.maxsize)
-    logger.info("Initializing with random seed: {}".format(args.random_seed))
-    # rng = numpy.random.RandomState(seed=[args.random_seed])
-    rng = random.Random(args.random_seed)
+    _DEBUG_MODE = argsd.pop("debug_mode")
+    nreps = argsd.pop("nreps")
+    ngens = argsd.pop("ngens")
+    random_seed = argsd.pop("random_seed", random.randint(0, sys.maxsize))
+
+    configd = dict(argsd)
+    configd["run_logger"] = RunLogger(name="supertramp", log_path=args.output_prefix + ".log")
+    configd["run_logger"].info("Initializing with random seed: {}".format(random_seed))
+    configd["rng"] = random.Random(random_seed)
+    configd["tree_log"] = open(configd["output_prefix"] + ".trees", "w")
+
     rep = 0
-    tree_log = open(args.output_prefix + ".trees", "w")
-    args.density_dependent_lineage_birth_model = False
-    while rep < args.nreps:
-        run_output_prefix = "{}.R{:04d}".format(args.output_prefix, rep+1)
-        logger.info("Run {} of {}: starting".format(rep+1, args.nreps))
-        supertramp_system = System(
-                dispersal_model="unconstrained",
-                random_seed=args.random_seed,
-                diversification_model_R=args.diversification_model_R,
-                diversification_model_a=args.diversification_model_a,
-                diversification_model_b=args.diversification_model_b,
-                diversification_model_s=args.diversification_model_s,
-                diversification_model_e=args.diversification_model_e,
-                global_lineage_niche_evolution_probability=args.niche_evolution_probability,
-                global_dispersal_rate=args.dispersal_rate,
-                rng=rng,
-                output_prefix=run_output_prefix,
-                tree_log=tree_log,
-                logger=logger,
-                log_frequency=args.log_frequency)
+    while rep < nreps:
+        run_output_prefix = "{}.R{:04d}".format(configd["output_prefix"], rep+1)
+        configd["run_logger"].info("Run {} of {}: starting".format(rep+1, nreps))
+        supertramp_system = System(**configd)
         supertramp_system.bootstrap()
         success = False
         while not success:
             try:
-                success = supertramp_system.run(args.ngens)
+                success = supertramp_system.run(ngens)
             except TotalExtinctionException:
-                logger.info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, args.nreps, supertramp_system.current_gen))
-                logger.info("Run {} of {}: restarting".format(rep+1, args.nreps))
+                configd["run_logger"].info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, nreps, supertramp_system.current_gen))
+                configd["run_logger"].info("Run {} of {}: restarting".format(rep+1, nreps))
             else:
-                logger.info("Run {} of {}: completed to termination condition".format(rep+1, args.nreps))
+                configd["run_logger"].info("Run {} of {}: completed to termination condition".format(rep+1, nreps))
                 supertramp_system.report()
                 break
         rep += 1
