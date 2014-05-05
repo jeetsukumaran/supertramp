@@ -941,7 +941,7 @@ def main():
                 configd["run_logger"].info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, nreps, supertramp_system.current_gen))
                 configd["run_logger"].info("Run {} of {}: restarting".format(rep+1, nreps))
             else:
-                configd["run_logger"].info("Run {} of {}: completed to termination condition".format(rep+1, nreps))
+                configd["run_logger"].info("Run {} of {}: completed to termination condition of {} generations".format(rep+1, nreps, ngens))
                 supertramp_system.report()
                 break
         rep += 1
