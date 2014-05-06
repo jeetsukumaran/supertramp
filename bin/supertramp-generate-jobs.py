@@ -70,7 +70,7 @@ def main():
     # niche_evolution_probs = [0.001, 0.01, 0.10, 1.0]
 
     # Expected equilibirum species richness, per habitat (per island): 10(30), 20(60), 40(120)
-    diversification_model_s0e0 = [ (0.1, 0.01), (0.2, 0.01), (0.4, 0.01)]
+    diversification_model_s0e0 = [ (0.001, 0.0001), (0.002, 0.0001), (0.004, 0.0001), (0.1, 0.01), (0.2, 0.01), (0.4, 0.01), ]
 
     dispersal_rates = [0.01, 0.1, 1.0, 10.0]
     niche_evolution_probs = [0.01, 0.10, 1.0]
