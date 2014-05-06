@@ -332,7 +332,7 @@ class Lineage(dendropy.Node):
         self.habitat_type = habitat_type
         self.system = system
         self.habitat_types = None
-        self.island_localities = None
+        self.island_habitat_localities = None
         self.habitats = None
         self.final_distribution_label = None
         self.edge.length = 0
@@ -344,20 +344,20 @@ class Lineage(dendropy.Node):
         # to work (or at least, the maximum number of habitat types and islands
         # must be known.
         assert self.habitat_types is None
-        assert self.island_localities is None
+        assert self.island_habitat_localities is None
         assert self.habitats is None
         self.habitat_types = BitVector(size=self.system.num_habitat_types)
-        self.island_localities = BitVector(size=self.system.num_islands)
+        self.island_habitat_localities = BitVector(size=self.system.num_islands)
         self.habitats = BitVector(size=self.system.num_islands * self.system.num_habitat_types)
 
     def register_habitat(self, habitat):
         self.habitats[habitat.index] = 1
-        self.island_localities[habitat.island.index] = 1
+        self.island_habitat_localities[habitat.island.index] = 1
         self.habitat_types[habitat.habitat_type.index] = 1
 
     def deregister_habitat(self, habitat):
         self.habitats[habitat.index] = 0
-        self.island_localities[habitat.island.index] = 0
+        self.island_habitat_localities[habitat.island.index] = 0
         # TODO: simply because it is removed from one particular habitat on one
         # particular island, does not mean that it is no longer associated with
         # this habitat type!!!
@@ -375,7 +375,7 @@ class Lineage(dendropy.Node):
         # diversifies
         if self.final_distribution_label is not None:
             return self.final_distribution_label
-        return "{}.{}".format(self.island_localities, self.habitat_types)
+        return "{}.{}".format(self.island_habitat_localities, self.habitat_types)
 
     def add_age_to_tips(self, ngens=1):
         """
@@ -406,7 +406,7 @@ class Lineage(dendropy.Node):
 
     def _debug_check_dump_biogeography(self, out):
         out.write("[{}:{}:{}:  ".format(id(self), self.index, self.label))
-        out.write("islands='{}'  ".format(self.island_localities))
+        out.write("islands='{}'  ".format(self.island_habitat_localities))
         out.write("habitat_types='{}'  ".format(self.habitat_types))
         out.write("habitats='{}'".format(self.habitats))
         out.write("]\n")
@@ -653,7 +653,7 @@ class System(object):
                     print("[{}]\n[{}]\n[{}]\n[{}]\n[{}]".format(
                             nd.label,
                             nd.distribution_label,
-                            nd.island_localities,
+                            nd.island_habitat_localities,
                             nd.habitat_types,
                             nd.habitats))
                     print(self.phylogeny._as_newick_string())
@@ -661,7 +661,7 @@ class System(object):
 
     def run_lineage_birth(self):
         lineage_splitting_rates = collections.defaultdict(list)
-        lineage_splitting_localities = collections.defaultdict(list)
+        lineage_splitting_habitat_localities = collections.defaultdict(list)
         for island in self.islands:
             for habitat in island.habitat_list:
                 if not habitat.lineages:
@@ -669,7 +669,7 @@ class System(object):
                 splitting_rate = self.diversification_model_s0 * (len(habitat.lineages) ** self.diversification_model_a)
                 for lineage in habitat.lineages:
                     lineage_splitting_rates[lineage].append(splitting_rate)
-                    lineage_splitting_localities[lineage].append(habitat)
+                    lineage_splitting_habitat_localities[lineage].append(habitat)
         for lineage in lineage_splitting_rates:
             total_rate = sum(lineage_splitting_rates[lineage])
             if self.rng.uniform(0, 1) <= total_rate:
@@ -684,8 +684,8 @@ class System(object):
                     c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
                 selected_habitat_idx = weighted_index_choice(lineage_splitting_rates[lineage],
                         self.rng)
-                # selected_habitat = lineage_split_localities[selected_habitat_idx]
-                for habitat_idx, habitat in enumerate(lineage_splitting_localities[lineage]):
+                # selected_habitat = lineage_split_habitat_localities[selected_habitat_idx]
+                for habitat_idx, habitat in enumerate(lineage_splitting_habitat_localities[lineage]):
                     habitat.remove_lineage(lineage)
                     if habitat_idx == selected_habitat_idx:
                         # sympatric speciation: "old" species retained in original habitat on island
@@ -735,18 +735,64 @@ class System(object):
                         break
                 assert found, lineage
 
+    def run_lineage_death_2(self):
+        lineage_death_rates = collections.defaultdict(list)
+        lineage_death_habitat_localities = collections.defaultdict(list)
+        lineage_counts = collections.Counter()
+        for island in self.islands:
+            for habitat in island.habitat_list:
+                lineage_counts.update(habitat.lineages)
+                if not habitat.lineages:
+                    continue
+                death_rate = self.diversification_model_e0 * (len(habitat.lineages) ** self.diversification_model_b)
+                for lineage in habitat.lineages:
+                    lineage_death_rates[lineage].append(death_rate)
+                    lineage_death_habitat_localities[lineage].append(habitat)
+        to_remove = []
+        for lineage in lineage_death_rates:
+            total_rate = sum(lineage_death_rates[lineage])
+            if self.rng.uniform(0, 1) <= total_rate:
+                # print(">>> {}: death: {}:{}".format(self.current_gen, lineage, lineage.label))
+                selected_habitat_idx = weighted_index_choice(lineage_death_rates[lineage],
+                        self.rng)
+                to_remove.append( (lineage, lineage_death_habitat_localities[lineage][selected_habitat_idx]) )
+        for lineage, habitat in to_remove:
+            habitat.remove_lineage(lineage)
+            lineage_counts.subtract([lineage])
+        for lineage in lineage_counts:
+            count = lineage_counts[lineage]
+            if count == 0:
+                if lineage is self.phylogeny.seed_node:
+                    raise TotalExtinctionException()
+                else:
+                    self.phylogeny.prune_subtree(node=lineage,
+                            update_splits=False, delete_outdegree_one=True)
+                    if self.phylogeny.seed_node.num_child_nodes() == 0:
+                        raise TotalExtinctionException()
+            elif _DEBUG_MODE:
+                ## sanity checking ...
+                found = True
+                for island in self.islands:
+                    for habitat in island.habitat_list:
+                        if lineage in habitat.lineages:
+                            found = True
+                            break
+                    if found:
+                        break
+                assert found, lineage
+
     # def run_simple_birth(self):
     #     tips = self.phylogeny.leaf_nodes()
     #     if not tips:
     #         raise TotalExtinctionException()
     #     if self.rng.uniform(0, 1) > self.global_per_lineage_birth_prob * len(tips):
     #         return
-    #     lineage_localities = collections.defaultdict(list)
+    #     lineage_habitat_localities = collections.defaultdict(list)
     #     for island in self.islands:
     #         for habitat in island.habitat_list:
     #             for lineage in habitat.lineages:
-    #                 lineage_localities[lineage].append(habitat)
-    #     splitting_lineage = self.rng.choice(list(lineage_localities.keys()))
+    #                 lineage_habitat_localities[lineage].append(habitat)
+    #     splitting_lineage = self.rng.choice(list(lineage_habitat_localities.keys()))
     #     c0, c1 = splitting_lineage.diversify(finalize_distribution_label=True)
     #     if _DEBUG_MODE:
     #         try:
@@ -755,13 +801,13 @@ class System(object):
     #             self.phylogeny.debug_check_tree()
     #     if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
     #         c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
-    #     splitting_lineage_localities = lineage_localities[splitting_lineage]
-    #     assert splitting_lineage_localities
-    #     if len(splitting_lineage_localities) == 1:
-    #         target = splitting_lineage_localities[0]
+    #     splitting_lineage_habitat_localities = lineage_habitat_localities[splitting_lineage]
+    #     assert splitting_lineage_habitat_localities
+    #     if len(splitting_lineage_habitat_localities) == 1:
+    #         target = splitting_lineage_habitat_localities[0]
     #     else:
-    #         target = self.rng.choice(splitting_lineage_localities)
-    #     for habitat in splitting_lineage_localities:
+    #         target = self.rng.choice(splitting_lineage_habitat_localities)
+    #     for habitat in splitting_lineage_habitat_localities:
     #         habitat.remove_lineage(splitting_lineage)
     #         if habitat is target:
     #             # sympatric speciation: "old" species retained in original habitat on island
@@ -781,12 +827,12 @@ class System(object):
     #     if self.rng.uniform(0, 1) > self.global_per_lineage_death_prob * len(tips):
     #         return
     #     extinguishing_lineage = self.rng.choice(tips)
-    #     lineage_localities = []
+    #     lineage_habitat_localities = []
     #     for island in self.islands:
     #         for habitat in island.habitat_list:
     #             if extinguishing_lineage in habitat.lineages:
-    #                 lineage_localities.append(habitat)
-    #     for loc in lineage_localities:
+    #                 lineage_habitat_localities.append(habitat)
+    #     for loc in lineage_habitat_localities:
     #         loc.remove_lineage(extinguishing_lineage)
     #     if extinguishing_lineage is self.phylogeny.seed_node:
     #         raise TotalExtinctionException()
