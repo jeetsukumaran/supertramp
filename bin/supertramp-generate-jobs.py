@@ -99,7 +99,7 @@ def main():
                     run_cmd.extend(["--dispersal-rate", str(dispersal_rate)])
                     run_cmd.extend(["--ngens", str(args.ngens)])
                     run_cmd.extend(["--output-prefix", output_prefix])
-                    run_cmd.append(dispersal_model)
+                    run_cmd.extend(["--dispersal-model", dispersal_model])
                     run_cmd = " ".join(run_cmd)
                     commands = []
                     if source_venv:

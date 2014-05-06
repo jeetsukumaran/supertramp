@@ -65,7 +65,7 @@ def main():
             help="number of islands (default = %(default)s).")
     landscape_options.add_argument("--num-habitat-types",
             type=int,
-            default=4,
+            default=3,
             help="number of habitat types per island (default = %(default)s).")
     diversification_param_options = parser.add_argument_group("Diversification Model Parameters")
     diversification_param_options.add_argument("-a", "--diversification-model-a",
