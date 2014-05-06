@@ -641,10 +641,10 @@ class System(object):
     def run_diversification(self):
         if self.rng.uniform(0, 1) <= 0.5:
             self.run_lineage_birth()
-            self.run_lineage_death()
+            self.run_lineage_death1()
         else:
             self.run_lineage_death()
-            self.run_lineage_birth()
+            self.run_lineage_birth1()
 
     def _debug_check_habitat_000(self):
         for nd in self.phylogeny:
@@ -695,7 +695,7 @@ class System(object):
                     else:
                         habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
 
-    def run_lineage_death(self):
+    def run_lineage_death_1(self):
         lineage_counts = collections.Counter()
         for island in self.islands:
             for habitat in island.habitat_list:
@@ -781,6 +781,33 @@ class System(object):
                         break
                 assert found, lineage
 
+    def run_lineage_death_3(self):
+        lineage_death_rates = collections.defaultdict(list)
+        lineage_death_habitat_localities = collections.defaultdict(list)
+        lineage_counts = collections.Counter()
+        for island in self.islands:
+            for habitat in island.habitat_list:
+                lineage_counts.update(habitat.lineages)
+                if not habitat.lineages:
+                    continue
+                death_rate = self.diversification_model_e0 * (len(habitat.lineages) ** self.diversification_model_b)
+                for lineage in habitat.lineages:
+                    lineage_death_rates[lineage].append(death_rate)
+                    lineage_death_habitat_localities[lineage].append(habitat)
+        for lineage in lineage_death_rates:
+            total_rate = sum(lineage_death_rates[lineage])
+            if self.rng.uniform(0, 1) <= total_rate:
+                for island in self.islands:
+                    for habitat in island.habitat_list:
+                        if lineage in habitat.lineages:
+                            habitat.remove_lineage(lineage)
+                if lineage is self.phylogeny.seed_node:
+                    raise TotalExtinctionException()
+                else:
+                    self.phylogeny.prune_subtree(node=lineage,
+                            update_splits=False, delete_outdegree_one=True)
+                    if self.phylogeny.seed_node.num_child_nodes() == 0:
+                        raise TotalExtinctionException()
     # def run_simple_birth(self):
     #     tips = self.phylogeny.leaf_nodes()
     #     if not tips:
