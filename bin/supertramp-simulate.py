@@ -37,8 +37,10 @@ import argparse
 import random
 from supertramp import supertramp
 
+_version_info = supertramp.description()
+
 def main():
-    parser = argparse.ArgumentParser(description="Biogeographical simulator")
+    parser = argparse.ArgumentParser(description="{} Biogeographical simulator".format(_version_info))
 
     run_options = parser.add_argument_group("Run Options")
     run_options.add_argument("-z", "--random-seed",
@@ -83,7 +85,7 @@ def main():
             default=0.01,
             help="'e' parameter of the diversfication model (default: %(default)s).")
     taxon_cycle_param_options = parser.add_argument_group("Taxon Cycle (Sub-)Model Parameters")
-    taxon_cycle_param_options.add_argument("--dispersal_model",
+    taxon_cycle_param_options.add_argument("--dispersal-model",
             type=str,
             default="unconstrained",
             choices=["constrained", "unconstrained"],
@@ -126,6 +128,7 @@ def main():
     configd = dict(argsd)
     configd["run_logger"] = supertramp.RunLogger(name="supertramp",
             log_path=args.output_prefix + ".log")
+    configd["run_logger"].info("Starting: {}".format(_version_info))
     configd["run_logger"].info("Initializing with random seed: {}".format(random_seed))
     configd["rng"] = random.Random(random_seed)
     configd["tree_log"] = open(configd["output_prefix"] + ".trees",

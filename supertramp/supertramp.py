@@ -36,6 +36,7 @@ try:
 except ImportError:
     from io import StringIO # Python 3
 import sys
+import os
 import random
 import logging
 import collections
@@ -44,9 +45,34 @@ import json
 from supertramp.BitVector import BitVector
 import dendropy
 
+__project__ = "Supertramp"
+__version__ = "0.1.0"
+
 _LOGGING_LEVEL_ENVAR = "SUPERTRAMP_LOGGING_LEVEL"
 _LOGGING_FORMAT_ENVAR = "SUPERTRAMP_LOGGING_FORMAT"
 _DEBUG_MODE = False
+
+def revision():
+    from dendropy.utility import vcsinfo
+    try:
+        try:
+            __homedir__ = os.path.dirname(os.path.abspath(__file__))
+        except IndexError:
+            __homedir__ = os.path.dirname(os.path.abspath(__file__))
+    except OSError:
+        __homedir__ = None
+    except:
+        __homedir__ = None
+    __revision__ = vcsinfo.Revision(repo_path=__homedir__)
+    return __revision__
+
+def description():
+    __revision__ = revision()
+    if __revision__.is_available:
+        revision_text = " ({})".format(__revision__)
+    else:
+        revision_text = ""
+    return "{} {}{}".format(__project__, __version__, revision_text)
 
 def dump_stack():
     for frame, filename, line_num, func, source_code, source_index in inspect.stack()[2:]:
@@ -437,6 +463,7 @@ class TotalExtinctionException(Exception):
 class System(object):
 
     def __init__(self, **kwargs):
+        self.run_lineage_death = self.run_lineage_death_1
         self.configure(kwargs)
 
     def configure(self, configd):
@@ -641,10 +668,10 @@ class System(object):
     def run_diversification(self):
         if self.rng.uniform(0, 1) <= 0.5:
             self.run_lineage_birth()
-            self.run_lineage_death1()
+            self.run_lineage_death()
         else:
             self.run_lineage_death()
-            self.run_lineage_birth1()
+            self.run_lineage_birth()
 
     def _debug_check_habitat_000(self):
         for nd in self.phylogeny:
