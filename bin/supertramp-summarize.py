@@ -223,15 +223,17 @@ def main():
     tree_processor = TreeProcessor()
     param_keys = collections.OrderedDict()
     param_keys["dispersal.model"]      = "dispersal_model"
-    param_keys["birth.rate"]           = "birth_rate"
-    param_keys["dispersal.factor"]     = "dispersal_rate_factor"
+    param_keys["s0"]                   = "s0"
+    param_keys["e0"]                   = "e0"
     param_keys["dispersal.rate"]       = "dispersal_rate"
     param_keys["niche.evolution.prob"] = "niche_evolution_prob"
 
     summaries = []
     for source_path in args.source_paths:
         source_dir = os.path.abspath(os.path.expanduser(os.path.expandvars(source_path)))
-        output_dir = source_dir
+        output_dir = os.path.join(source_dir, "processed")
+        if not os.path.exists(output_dir):
+            os.mkdir(output_dir)
         run_manifest_path = os.path.join(source_dir, "run-manifest.json")
         if not os.path.exists(run_manifest_path):
             sys.exit("Manifest file not found: {}".format(run_manifest_path))
@@ -239,13 +241,16 @@ def main():
             run_manifest = json.load(run_manifest_f)
         jobs = list(run_manifest.keys())
         for job_idx, job in enumerate(jobs):
-            if not args.quiet:
-                sys.stderr.write("Processing job {} of {}: {}\n".format(job_idx+1, len(jobs), job))
             params = {}
             for param_key in param_keys:
                 params[param_key] = run_manifest[job][param_keys[param_key]]
             run_data = run_manifest[job]
             tree_filepath = os.path.join(source_dir, run_data["treefile"])
+            if not os.path.exists(tree_filepath):
+                sys.stderr.write("Skipping job {} of {} (missing): {}\n".format(job_idx+1, len(jobs), job))
+                continue
+            if not args.quiet:
+                sys.stderr.write("Processing job {} of {}: {}\n".format(job_idx+1, len(jobs), job))
             trees = dendropy.TreeList.get_from_path(
                     tree_filepath,
                     "newick")
