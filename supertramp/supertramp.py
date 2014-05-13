@@ -413,7 +413,7 @@ class Lineage(dendropy.Node):
         else:
             self.edge.length += ngens
 
-    def diversify(self, finalize_distribution_label=True):
+    def diversify(self, finalize_distribution_label=True, nsplits=1):
         """
         Spawns two child lineages with self as parent.
         Returns tuple consisting of these two lineages.
@@ -422,13 +422,13 @@ class Lineage(dendropy.Node):
             raise Exception("Trying to diversify internal node: {}: {}".format(self.label, ", ".join(c.label for c in self._child_nodes)))
         if finalize_distribution_label:
             self.final_distribution_label = self.distribution_label
-        c1 = Lineage(habitat_type=self.habitat_type, system=self.system)
-        c2 = Lineage(habitat_type=self.habitat_type, system=self.system)
-        self.add_child(c1)
-        self.add_child(c2)
-        assert c1.parent_node is self
-        assert c2.parent_node is self
-        return (c1, c2)
+        children = []
+        for i in range(nsplits+2):
+            c1 = Lineage(habitat_type=self.habitat_type, system=self.system)
+            children.append(c1)
+            self.add_child(c1)
+            assert c1.parent_node is self
+        return children
 
     def _debug_check_dump_biogeography(self, out):
         out.write("[{}:{}:{}:  ".format(id(self), self.index, self.label))
@@ -463,6 +463,7 @@ class TotalExtinctionException(Exception):
 class System(object):
 
     def __init__(self, **kwargs):
+        self.run_lineage_birth = self.run_lineage_birth_1
         self.run_lineage_death = self.run_lineage_death_1
         self.configure(kwargs)
 
@@ -686,7 +687,16 @@ class System(object):
                     print(self.phylogeny._as_newick_string())
                 assert str(nd.habitat_types) != "000"
 
-    def run_lineage_birth(self):
+    def run_lineage_birth_0(self):
+        # - Each lineage has a probability of splitting given by
+        #   the sum of the local birth rates for the lineage across all
+        #   habitats in which it occurs.
+        # - The probability that a particular lineage in a particular habitat
+        #   speciates, given that the lineage has split in that generation,
+        #   is given by the local (habitat-specific) birth rate normalized by
+        #   the sum of birth rates across all habitats.
+        # - In any particular generation, a particular lineage splits at most
+        #   once.
         lineage_splitting_rates = collections.defaultdict(list)
         lineage_splitting_habitat_localities = collections.defaultdict(list)
         for island in self.islands:
@@ -722,7 +732,71 @@ class System(object):
                     else:
                         habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
 
+    def run_lineage_birth_1(self):
+        # - Each lineage in each habitat has an (independent) probability of
+        #   splitting given by the habitat-specific birth rate.
+        # - A particular lineage's probability of splitting in a particular
+        #   habitat is independent of the any other lineage splitting in
+        #   the same or any other habitat.
+        # - A particular lineage's probability of splitting in a particular
+        #   habitat is also independent of the *same* lineage going extinct
+        #   in any other habitat on any other island.
+        # - A particular lineage may speciate in multiple habitats
+        #   simultaneously in the same generation.
+        lineage_splitting_habitat_localities = collections.defaultdict(set)
+        lineage_habitats = collections.defaultdict(set)
+        for island in self.islands:
+            for habitat in island.habitat_list:
+                if not habitat.lineages:
+                    continue
+                splitting_rate = self.diversification_model_s0 * (len(habitat.lineages) ** self.diversification_model_a)
+                for lineage in habitat.lineages:
+                    lineage_habitats[lineage].add(habitat)
+                    if self.rng.uniform(0, 1) <= splitting_rate:
+                        lineage_splitting_habitat_localities[lineage].add(habitat)
+        for lineage in lineage_splitting_habitat_localities:
+            splitting_habitats = lineage_splitting_habitat_localities[lineage]
+            children = lineage.diversify(finalize_distribution_label=True,
+                    nsplits=len(splitting_habitats))
+            if _DEBUG_MODE:
+                try:
+                    self.phylogeny._debug_check_tree()
+                except AttributeError:
+                    self.phylogeny.debug_check_tree()
+            c0 = children[0]
+            c_remaining = set(children[1:])
+            if len(self.habitat_types) > 1:
+                # assumes all children have the same habitat type
+                habitats_to_evolve_into = [ h for h in self.habitat_types if h is not c0.habitat_type ]
+                for c1 in c_remaining:
+                    if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
+                        c1.habitat_type = self.rng.choice(habitats_to_evolve_into)
+            for habitat in lineage_habitats[lineage]:
+                habitat.remove_lineage(lineage)
+                if habitat in splitting_habitats:
+                    # sympatric speciation: "old" species retained in original habitat on island
+                    # new species added to new habitat on island
+                    c1 = c_remaining.pop()
+                    habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+                    habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
+                else:
+                    habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+
     def run_lineage_death_1(self):
+        # - Each lineage in each habitat has an (independent) probability of
+        #   going locally extinct (i.e., extirpated from a particular
+        #   habitat) given by the local, habitat-specific death rate.
+        # - A particular lineage's probability of going extinct in a
+        #   particular habitat is independent of the any other lineage going
+        #   extinct in the same or any other habitat.
+        # - A particular lineage's probability of going extinct in a
+        #   particular habitat is also independent of the *same* lineage
+        #   going extinct in any other habitat on any other island.
+        # - A particular lineage may be extirpated from multiple habitats
+        #   simultaneously in the same generation.
+        # - Once a lineage is no longer present in any habitat across all
+        #   islands, it is considered to have gone globally-extinct and
+        #   removed from the system.
         lineage_counts = collections.Counter()
         for island in self.islands:
             for habitat in island.habitat_list:
@@ -763,6 +837,17 @@ class System(object):
                 assert found, lineage
 
     def run_lineage_death_2(self):
+        # - Each lineage in each habitat has a probability of going
+        #   locally-extinct (i.e., extirpated from a particular habitat)
+        #   based on its local (habitat-specific) death rate.
+        # - A particular lineage's probability of going extinct in a particular
+        #   habitat is independent of the any other lineage going extinct in
+        #   the same or any other habitat.
+        # - A lineage can only be extirpated from a single habitat
+        #   in any given generation.
+        # - Once a lineage is no longer present in any habitat across all
+        #   islands, it is considered to have gone globally-extinct and
+        #   removed from the system.
         lineage_death_rates = collections.defaultdict(list)
         lineage_death_habitat_localities = collections.defaultdict(list)
         lineage_counts = collections.Counter()
@@ -809,6 +894,12 @@ class System(object):
                 assert found, lineage
 
     def run_lineage_death_3(self):
+        # - Each lineage has a probability of going globally-extinct given by
+        #   the sum of the local death rates for the lineage across all
+        #   habitats in which it occurs.
+        # - A particular lineage's probability of going extinct in a
+        #   particular habitat is independent of the any other lineage going
+        #   extinct in the same or any other habitat.
         lineage_death_rates = collections.defaultdict(list)
         lineage_death_habitat_localities = collections.defaultdict(list)
         lineage_counts = collections.Counter()
