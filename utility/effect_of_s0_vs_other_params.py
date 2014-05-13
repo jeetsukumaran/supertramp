@@ -44,12 +44,14 @@ def main():
     float_template = "{:1.1e}"
     if args.unmanaged_runs:
         tree_filepaths = []
+        pattern = "*.trees"
         for source_path in args.source_paths:
-            source_dir = os.path.expanduser(os.path.expandvars(source_path))
-            for fpath in os.listdir(source_dir):
-                if fpath.endswith(".trees"):
-                    tree_filepath = os.path.join(source_dir, fpath)
-                    tree_filepaths.append(tree_filepath)
+            root_dir = os.path.expanduser(os.path.expandvars(source_path))
+            for root, dirs, files in os.walk(root_dir):
+                for filename in fnmatch.filter(files, pattern):
+                    tree_filepaths.append(os.path.join(root, filename))
+        if not tree_filepaths:
+            sys.exit("No tree files found")
         col_width = max(len(tree_filepath) for tree_filepath in tree_filepaths)
         text_template = "{{:{}}}".format(col_width)
         row_template = text_template + ":   " + float_template
