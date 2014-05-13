@@ -629,6 +629,8 @@ class System(object):
                 if isl1 is not isl2:
                     for habitat_type in self.habitat_types:
                         isl1.set_dispersal_rate(habitat_type, isl2, habitat_dispersal_rates[habitat_type])
+                        self.run_logger.info("Island {} to {} dispersal rate for habitat {} = {}".format(
+                            isl1, isl2, habitat_type, habitat_dispersal_rates[habitat_type]))
 
         # initialize lineages
         self.seed_habitat = self.dispersal_source_habitat_types[0]
