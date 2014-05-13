@@ -70,17 +70,23 @@ def main():
     # niche_evolution_probs = [0.001, 0.01, 0.10, 1.0]
 
     # Expected equilibirum species richness, per habitat (per island): 10(30), 20(60), 40(120)
-    diversification_model_s0e0 = [ (0.001, 0.0001), (0.002, 0.0001), (0.004, 0.0001), (0.1, 0.01), (0.2, 0.01), (0.4, 0.01), ]
-
-    dispersal_rates = [0.01, 0.1, 1.0, 10.0]
-    niche_evolution_probs = [0.01, 0.10, 1.0]
+    diversification_model_s0e0 = [
+            (1e-2, 1e-3),
+            (1e-2, 1e-4),
+            (1e-4, 1e-5),
+            (1e-4, 1e-6),
+            (1e-6, 1e-7),
+            (1e-6, 1e-8),
+            ]
+    dispersal_rates = [1e-6, 1e-4,]
+    niche_evolution_probs = [1e-3, 1e-1,]
 
     run_manifest = {}
     for dm_idx, dispersal_model in enumerate(dispersal_models):
         for br_idx, (s0,e0) in enumerate(diversification_model_s0e0):
             for drf_idx, dispersal_rate in enumerate(dispersal_rates):
                 for nef_idx, niche_evolution_prob in enumerate(niche_evolution_probs):
-                    stem = "{dispersal_model}_s{s0:6.5f}_e{e0:6.5f}_r{dispersal_rate:6.5f}_n{niche_evolution_prob:6.5f}".format(
+                    stem = "{dispersal_model}_s{s0:10.8f}_e{e0:10.8f}_r{dispersal_rate:10.8f}_n{niche_evolution_prob:10.8f}".format(
                             dispersal_model=dispersal_model,
                             s0=s0,
                             e0=e0,
