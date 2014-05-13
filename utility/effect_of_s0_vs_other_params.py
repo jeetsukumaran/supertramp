@@ -2,6 +2,7 @@
 
 import os
 import sys
+import fnmatch
 import json
 import argparse
 import collections
@@ -40,11 +41,28 @@ def main():
 
     summaries = []
     out = sys.stdout
-    for source_path in args.source_paths:
-        source_dir = os.path.abspath(os.path.expanduser(os.path.expandvars(source_path)))
-        if args.unmanaged_runs:
-            pass
-        else:
+    float_template = "{:1.1e}"
+    if args.unmanaged_runs:
+        tree_filepaths = []
+        for source_path in args.source_paths:
+            source_dir = os.path.expanduser(os.path.expandvars(source_path))
+            for fpath in os.listdir(source_dir):
+                if fpath.endswith(".trees"):
+                    tree_filepath = os.path.join(source_dir, fpath)
+                    tree_filepaths.append(tree_filepath)
+        col_width = max(len(tree_filepath) for tree_filepath in tree_filepaths)
+        text_template = "{{:{}}}".format(col_width)
+        row_template = text_template + ":   " + float_template
+        for tree_filepath in tree_filepaths:
+            trees = dendropy.TreeList.get_from_path(
+                    tree_filepath,
+                    "newick")
+            value = get_species_index_max_and_min(trees)[1]
+            out.write(row_template.format(tree_filepath, value))
+            out.write("\n")
+    else:
+        for source_path in args.source_paths:
+            source_dir = os.path.abspath(os.path.expanduser(os.path.expandvars(source_path)))
             run_manifest_path = os.path.join(source_dir, "run-manifest.json")
             if not os.path.exists(run_manifest_path):
                 sys.exit("Manifest file not found: {}".format(run_manifest_path))
@@ -73,29 +91,11 @@ def main():
                         tree_filepath,
                         "newick")
                 values.append(get_species_index_max_and_min(trees)[1])
-                values = ["{:1.1e}".format(v) for v in values]
+                values = [float_template.format(v) for v in values]
                 values.insert(0, params["disp.model"])
                 values = [text_template.format(v) for v in values]
                 out.write(" | ".join(values))
                 out.write("\n")
-            # colorized_trees_filepath = os.path.join(output_dir, "{}.processed.trees".format(job))
-            # with open(colorized_trees_filepath, "w") as trees_outf:
-            #     summary_stats = tree_processor.process_trees(
-            #             trees,
-            #             trees_outf=trees_outf,
-            #             params=params,
-            #             summaries=summaries)
-    # param_fields = list(param_keys.keys())
-    # stat_fields = sorted(set(summaries[0].keys()) - set(param_fields))
-    # all_fields = param_fields + stat_fields
-    # summary_stats_fpath = os.path.join(output_dir, "summary.txt")
-    # with open(summary_stats_fpath, "w") as summary_outf:
-        # writer = csv.DictWriter(summary_outf,
-            #     fieldnames=all_fields,
-            #     restval="NA",
-            #     delimiter="\t")
-        # writer.writeheader()
-        # writer.writerows(summaries)
 
 if __name__ == "__main__":
     main()
