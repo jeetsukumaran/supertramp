@@ -423,7 +423,7 @@ class Lineage(dendropy.Node):
         if finalize_distribution_label:
             self.final_distribution_label = self.distribution_label
         children = []
-        for i in range(nsplits+2):
+        for i in range(nsplits+1):
             c1 = Lineage(habitat_type=self.habitat_type, system=self.system)
             children.append(c1)
             self.add_child(c1)
@@ -760,6 +760,7 @@ class System(object):
             splitting_habitats = lineage_splitting_habitat_localities[lineage]
             children = lineage.diversify(finalize_distribution_label=True,
                     nsplits=len(splitting_habitats))
+            assert len(children) == len(splitting_habitats) + 1
             if _DEBUG_MODE:
                 try:
                     self.phylogeny._debug_check_tree()
@@ -783,6 +784,7 @@ class System(object):
                     habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
                 else:
                     habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+            assert len(c_remaining) == 0
 
     def run_lineage_death_1(self):
         # - Each lineage in each habitat has an (independent) probability of
