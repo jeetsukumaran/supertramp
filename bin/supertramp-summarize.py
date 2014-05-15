@@ -129,8 +129,14 @@ class TreeProcessor(object):
                     tree.stats[unweighted_habitat_dist_key] = weighted
                     unweighted_habitat_dist_count += 1
             assert weighted_habitat_dist_count == unweighted_habitat_dist_count
-            tree.stats["habitat.mean.pdist.weighted"] = weighted_habitat_dist_total / weighted_habitat_dist_count
-            tree.stats["habitat.mean.pdist.unweighted"] = unweighted_habitat_dist_total / unweighted_habitat_dist_count
+            try:
+                tree.stats["habitat.mean.pdist.weighted"] = weighted_habitat_dist_total / weighted_habitat_dist_count
+            except ZeroDivisionError:
+                tree.stats["habitat.mean.pdist.weighted"] = "NA"
+            try:
+                tree.stats["habitat.mean.pdist.unweighted"] = unweighted_habitat_dist_total / unweighted_habitat_dist_count
+            except ZeroDivisionError:
+                tree.stats["habitat.mean.pdist.unweighted"] = "NA"
 
             weighted_island_dist_total = 0.0
             weighted_island_dist_count = 0
@@ -158,8 +164,14 @@ class TreeProcessor(object):
                     tree.stats[unweighted_island_dist_key] = weighted
                     unweighted_island_dist_count += 1
             assert weighted_island_dist_count == unweighted_island_dist_count
-            tree.stats["island.mean.pdist.weighted"] = weighted_island_dist_total / weighted_island_dist_count
-            tree.stats["island.mean.pdist.unweighted"] = unweighted_island_dist_total / unweighted_island_dist_count
+            try:
+                tree.stats["island.mean.pdist.weighted"] = weighted_island_dist_total / weighted_island_dist_count
+            except ZeroDivisionError:
+                tree.stats["island.mean.pdist.weighted"] = "NA"
+            try:
+                tree.stats["island.mean.pdist.unweighted"] = unweighted_island_dist_total / unweighted_island_dist_count
+            except ZeroDivisionError:
+                tree.stats["island.mean.pdist.unweighted"] = "NA"
 
             if summaries is not None:
                 summaries.append(dict(tree.stats))
