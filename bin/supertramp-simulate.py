@@ -35,6 +35,7 @@ import os
 import sys
 import argparse
 import random
+import logging
 from supertramp import supertramp
 
 _version_info = supertramp.description()
@@ -50,10 +51,16 @@ def main():
             type=int,
             default=10,
             help="number of replicates (default = %(default)s).")
-    run_options.add_argument("-g", "--log-frequency",
+    run_options.add_argument("--log-frequency",
             default=100,
             type=int,
             help="Frequency that background progress messages get written to the log (default = %(default)s).")
+    run_options.add_argument("--file-logging-level",
+            default="debug",
+            help="Message level threshold for file logs.")
+    run_options.add_argument("--screen-logging-level",
+            default="info",
+            help="Message level threshold for screen logs.")
     run_options.add_argument("--debug-mode",
             action="store_true",
             default=False,
@@ -76,13 +83,13 @@ def main():
             type=float,
             default=0.5,
             help="'b' parameter of the diversfication model (default: %(default)s).")
-    diversification_param_options.add_argument("-s", "--diversification-model-s0",
+    diversification_param_options.add_argument("-s", "--diversification-model-s0", "--s0",
             type=float,
-            default=0.40,
+            default=0.001,
             help="'s' parameter of the diversfication model (default: %(default)s).")
-    diversification_param_options.add_argument("-e", "--diversification-model-e0",
+    diversification_param_options.add_argument("-e", "--diversification-model-e0", "--e0",
             type=float,
-            default=0.01,
+            default=0.0001,
             help="'e' parameter of the diversfication model (default: %(default)s).")
     taxon_cycle_param_options = parser.add_argument_group("Taxon Cycle (Sub-)Model Parameters")
     taxon_cycle_param_options.add_argument("--dispersal-model",
@@ -126,8 +133,11 @@ def main():
         random_seed = random.randint(0, sys.maxsize)
 
     configd = dict(argsd)
-    configd["run_logger"] = supertramp.RunLogger(name="supertramp",
-            log_path=args.output_prefix + ".log")
+    configd["run_logger"] = supertramp.RunLogger(
+            name="supertramp",
+            log_path=args.output_prefix + ".log",
+            stderr_logging_level=configd.pop("screen_logging_level"),
+            file_logging_level=configd.pop("file_logging_level"))
     configd["run_logger"].info("Starting: {}".format(_version_info))
     configd["run_logger"].info("Initializing with random seed: {}".format(random_seed))
     configd["rng"] = random.Random(random_seed)

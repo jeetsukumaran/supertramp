@@ -792,6 +792,12 @@ class System(object):
             children = lineage.diversify(finalize_distribution_label=True,
                     nsplits=len(splitting_habitats))
 
+            self.run_logger.debug("Lineage {splitting_lineage} splitting in {num_islands} islands: {islands}".format(
+                splitting_lineage=lineage.label,
+                num_islands=len(splitting_habitats),
+                islands=[habitat.island.label for habitat in splitting_habitats],
+                ))
+
             assert len(children) == len(splitting_habitats) + 1
             if _DEBUG_MODE:
                 try:
