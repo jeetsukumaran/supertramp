@@ -349,7 +349,7 @@ class Island(object):
                     continue
                 if self.rng.uniform(0, 1) <= rate:
                     lineage = self.rng.choice(list(habitat.lineages))
-                    self.run_logger.debug("Lineage {lineage}, with habitat type '{habitat_type}', dispersing from island {island1} to {island2}, ".format(
+                    self.run_logger.debug("{lineage}, with habitat type '{habitat_type}', dispersing from island {island1} to {island2}, ".format(
                         island1=self.label,
                         island2=dest_island.label,
                         habitat_type=lineage.habitat_type,
@@ -423,7 +423,10 @@ class Lineage(dendropy.Node):
     label = property(_get_label, _set_label)
 
     def _get_logging_label(self):
-        return "S{:d}.{}".format(self.index, self.distribution_label)
+        return "<Lineage S{:d}: {}.{}>".format(
+                self.index,
+                self.island_habitat_localities,
+                self.habitat_types)
     logging_label = property(_get_logging_label)
 
     @property
@@ -803,7 +806,7 @@ class System(object):
                     splitting_habitats.remove(self.rng.choice(splitting_habitats))
             children = lineage.diversify(finalize_distribution_label=True,
                     nsplits=len(splitting_habitats))
-            self.run_logger.debug("Lineage {splitting_lineage} speciating in {num_islands} islands: {islands}".format(
+            self.run_logger.debug("{splitting_lineage} speciating in {num_islands} islands: {islands}".format(
                 splitting_lineage=lineage.logging_label,
                 num_islands=len(splitting_habitats),
                 islands=",".join([habitat.island.label for habitat in splitting_habitats]),
@@ -828,7 +831,7 @@ class System(object):
                 if habitat in splitting_habitats:
                     c1 = c_remaining.pop()
                     habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
-                    self.run_logger.debug("Lineage {splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') speciating to {daughter_lineage1} (with habitat type '{daughter_lineage1_habitat_type}') in island {island}".format(
+                    self.run_logger.debug("{splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') speciating to {daughter_lineage1} (with habitat type '{daughter_lineage1_habitat_type}') in island {island}".format(
                         splitting_lineage=lineage.logging_label,
                         splitting_lineage_habitat_type=lineage.habitat_type.label,
                         daughter_lineage0=c0.logging_label,
@@ -838,7 +841,7 @@ class System(object):
                         ))
                     if self.sympatric_speciation:
                         habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
-                        self.run_logger.debug("Lineage {splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') continuing as {daughter_lineage0} in island {island}".format(
+                        self.run_logger.debug("{splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') continuing as {daughter_lineage0} in island {island}".format(
                             splitting_lineage=lineage.logging_label,
                             splitting_lineage_habitat_type=lineage.habitat_type.label,
                             daughter_lineage0=c0.logging_label,
@@ -849,7 +852,7 @@ class System(object):
                 else:
                     habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
                     c0_placed = True
-                    self.run_logger.debug("Lineage {splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') continuing as {daughter_lineage0} in island {island}".format(
+                    self.run_logger.debug("{splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') continuing as {daughter_lineage0} in island {island}".format(
                         splitting_lineage=lineage.logging_label,
                         splitting_lineage_habitat_type=lineage.habitat_type.label,
                         daughter_lineage0=c0.logging_label,
@@ -890,7 +893,7 @@ class System(object):
                     if self.rng.uniform(0, 1) <= death_rate:
                         to_remove.append(lineage)
                 for lineage in to_remove:
-                    self.run_logger.debug("Lineage {lineage} extirpated from island {island}".format(
+                    self.run_logger.debug("{lineage} extirpated from island {island}".format(
                         lineage=lineage.logging_label,
                         island=habitat.island.label,
                         ))
@@ -899,7 +902,7 @@ class System(object):
         for lineage in lineage_counts:
             count = lineage_counts[lineage]
             if count == 0:
-                self.run_logger.debug("Lineage {lineage} extirpated from all islands and is now globally extinct".format(
+                self.run_logger.debug("{lineage} extirpated from all islands and is now globally extinct".format(
                     lineage=lineage.logging_label,
                     ))
                 if lineage is self.phylogeny.seed_node:
