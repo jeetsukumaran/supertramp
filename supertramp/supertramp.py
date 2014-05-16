@@ -124,20 +124,38 @@ class RunLogger(object):
         self.name = kwargs.get("name", "RunLog")
         self._log = logging.getLogger(self.name)
         self._log.setLevel(logging.DEBUG)
+        self.handlers = []
         if kwargs.get("log_to_stderr", True):
-            ch1 = logging.StreamHandler()
+            handler1 = logging.StreamHandler()
             stderr_logging_level = self.get_logging_level(kwargs.get("stderr_logging_level", logging.INFO))
-            ch1.setLevel(stderr_logging_level)
-            ch1.setFormatter(self.get_default_formatter())
-            self._log.addHandler(ch1)
+            handler1.setLevel(stderr_logging_level)
+            handler1.setFormatter(self.get_default_formatter())
+            self._log.addHandler(handler1)
+            self.handlers.append(handler1)
         if kwargs.get("log_to_file", True):
             log_stream = kwargs.get("log_stream", \
                 open(kwargs.get("log_path", self.name + ".log"), "w"))
-            ch2 = logging.StreamHandler(log_stream)
+            handler2 = logging.StreamHandler(log_stream)
             file_logging_level = self.get_logging_level(kwargs.get("file_logging_level", logging.DEBUG))
-            ch2.setLevel(file_logging_level)
-            ch2.setFormatter(self.get_default_formatter())
-            self._log.addHandler(ch2)
+            handler2.setLevel(file_logging_level)
+            handler2.setFormatter(self.get_default_formatter())
+            self._log.addHandler(handler2)
+            self.handlers.append(handler2)
+        self._system = None
+
+    def _get_system(self):
+        return self._system
+
+    def _set_system(self, system):
+        self._system = system
+        if self._system is None:
+            for handler in self.handlers:
+                handler.setFormatter(self.get_default_formatter())
+        else:
+            for handler in self.handlers:
+                handler.setFormatter(self.get_simulation_generation_formatter())
+
+    system = property(_get_system, _set_system)
 
     def get_logging_level(self, level=None):
         if level in [logging.NOTSET, logging.DEBUG, logging.INFO, logging.WARNING,
@@ -170,6 +188,11 @@ class RunLogger(object):
         f.datefmt='%Y-%m-%d %H:%M:%S'
         return f
 
+    def get_simulation_generation_formatter(self):
+        f = logging.Formatter("[%(asctime)s] Generation %(current_generation)s: %(message)s")
+        f.datefmt='%Y-%m-%d %H:%M:%S'
+        return f
+
     def get_rich_formatter(self):
         f = logging.Formatter("[%(asctime)s] %(filename)s (%(lineno)d): %(levelname) 8s: %(message)s")
         f.datefmt='%Y-%m-%d %H:%M:%S'
@@ -197,20 +220,28 @@ class RunLogger(object):
         if logging_formatter is not None:
             logging_formatter.datefmt='%H:%M:%S'
 
+    def supplemental_info_d(self):
+        if self._system is not None:
+            return {
+                    "current_generation" : self._system.current_gen,
+                    }
+        else:
+            return None
+
     def debug(self, msg, *args, **kwargs):
-        self._log.debug(msg, *args, **kwargs)
+        self._log.debug(msg, extra=self.supplemental_info_d())
 
     def info(self, msg, *args, **kwargs):
-        self._log.info(msg, *args, **kwargs)
+        self._log.info(msg, extra=self.supplemental_info_d())
 
     def warning(self, msg, *args, **kwargs):
-        self._log.warning(msg, *args, **kwargs)
+        self._log.warning(msg, extra=self.supplemental_info_d())
 
     def error(self, msg, *args, **kwargs):
-        self._log.error(msg, *args, **kwargs)
+        self._log.error(msg, extra=self.supplemental_info_d())
 
     def critical(self, msg, *args, **kwargs):
-        self._log.critical(msg, *args, **kwargs)
+        self._log.critical(msg, extra=self.supplemental_info_d())
 
 class HabitatType(object):
 
@@ -238,12 +269,10 @@ class Habitat(object):
 
     def __init__(self,
             habitat_type,
-            carrying_capacity,
             island):
         self.index = self.__class__.counter
         self.__class__.counter += 1
         self.habitat_type = habitat_type
-        self.carrying_capacity = carrying_capacity
         self.island = island
         self.lineages = set()
         self.migrants = set()
@@ -279,27 +308,20 @@ class Island(object):
             rng,
             label,
             habitat_types,
-            habitat_carrying_capacities=None):
+            run_logger=None):
         self.index = self.__class__.counter
         self.__class__.counter += 1
         self.rng = rng
         self.label = label
         self.habitat_types = habitat_types
-        if habitat_carrying_capacities is None:
-            self.habitat_carrying_capacities = [None for h in self.habitat_types]
-        else:
-            if len(habitat_carrying_capacities) != len(self.habitat_types):
-                raise ValueError("Require exactly {} carrying capacities, but given {}".format(len(self.habitat_types),
-                    len(habitat_carrying_capacities)))
-            self.habitat_carrying_capacities = habitat_carrying_capacities
         self.habitat_list = []
         self.habitats_by_type = {}
+        self.run_logger = run_logger
 
         # construct habitats
         for ht_idx, ht in enumerate(self.habitat_types):
             h = Habitat(
                     habitat_type=ht,
-                    carrying_capacity=self.habitat_carrying_capacities[ht_idx],
                     island=self)
             self.habitat_list.append(h)
             self.habitats_by_type[ht] = h
@@ -327,6 +349,11 @@ class Island(object):
                     continue
                 if self.rng.uniform(0, 1) <= rate:
                     lineage = self.rng.choice(list(habitat.lineages))
+                    self.run_logger.debug("Dispersal from island {island1} to {island2}, habitat {habitat_type}: lineage {lineage}".format(
+                        island1=self.label,
+                        island2=dest_island.label,
+                        habitat_type=lineage.habitat_type,
+                        lineage=lineage.label))
                     dest_island.receive_migrant(lineage=lineage, habitat_type=lineage.habitat_type)
 
     def process_migrants(self):
@@ -469,12 +496,15 @@ class System(object):
 
     def configure(self, configd):
 
+        self.reset_system_globals()
+
         self.output_prefix = configd.pop("output_prefix", "supertramp")
 
         self.run_logger = configd.pop("run_logger", None)
         if self.run_logger is None:
             self.run_logger = RunLogger(name="supertramp",
                     log_path=self.output_prefix + ".log")
+        self.run_logger.system = self
 
         self.name = configd.pop("name", None)
         if self.name is None:
@@ -557,8 +587,6 @@ class System(object):
         if configd:
             raise TypeError("Unsupported configuration keywords: {}".format(configd))
 
-        self.reset_system_globals()
-
     def reset_system_globals(self):
         HabitatType.reset_counter()
         Habitat.reset_counter()
@@ -603,7 +631,8 @@ class System(object):
             island = Island(
                     rng=self.rng,
                     label=island_label,
-                    habitat_types=self.habitat_types)
+                    habitat_types=self.habitat_types,
+                    run_logger=self.run_logger)
             self.islands.append(island)
         self.all_islands_bitmask = (1 << len(self.islands)) - 1
 
@@ -757,9 +786,12 @@ class System(object):
                     if self.rng.uniform(0, 1) <= splitting_rate:
                         lineage_splitting_habitat_localities[lineage].add(habitat)
         for lineage in lineage_splitting_habitat_localities:
+
             splitting_habitats = lineage_splitting_habitat_localities[lineage]
+
             children = lineage.diversify(finalize_distribution_label=True,
                     nsplits=len(splitting_habitats))
+
             assert len(children) == len(splitting_habitats) + 1
             if _DEBUG_MODE:
                 try:
