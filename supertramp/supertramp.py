@@ -349,7 +349,7 @@ class Island(object):
                     continue
                 if self.rng.uniform(0, 1) <= rate:
                     lineage = self.rng.choice(list(habitat.lineages))
-                    self.run_logger.debug("Dispersal from island {island1} to {island2}, habitat {habitat_type}: lineage {lineage}".format(
+                    self.run_logger.debug("Lineage {lineage}, with habitat type '{habitat_type}', dispersing from island {island1} to {island2}, ".format(
                         island1=self.label,
                         island2=dest_island.label,
                         habitat_type=lineage.habitat_type,
@@ -820,18 +820,22 @@ class System(object):
                     c1 = c_remaining.pop()
                     habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
                     habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
-                    self.run_logger.debug("Lineage {splitting_lineage} speciating to {daughter_lineage1} in island {island}".format(
+                    self.run_logger.debug("Lineage {splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') speciating to {daughter_lineage1} (with habitat type '{daughter_lineage1_habitat_type}') in island {island}".format(
                         splitting_lineage=lineage.logging_label,
+                        splitting_lineage_habitat_type=lineage.habitat_type.label,
                         daughter_lineage0=c0.logging_label,
                         daughter_lineage1=c1.logging_label,
+                        daughter_lineage1_habitat_type=c1.habitat_type.label,
                         island=habitat.island.label,
                         ))
                 else:
                     habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
-                    self.run_logger.debug("Lineage {splitting_lineage} continuing as {daughter_lineage0} in island {island}".format(
+                    self.run_logger.debug("Lineage {splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') continuing as {daughter_lineage0} in island {island}".format(
                         splitting_lineage=lineage.logging_label,
+                        splitting_lineage_habitat_type=lineage.habitat_type.label,
                         daughter_lineage0=c0.logging_label,
                         daughter_lineage1=c1.logging_label,
+                        daughter_lineage1_habitat_type=c1.habitat_type.label,
                         island=habitat.island.label,
                         ))
             assert len(c_remaining) == 0
