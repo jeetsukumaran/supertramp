@@ -6,13 +6,14 @@ import json
 import random
 import argparse
 
-kwyjibo_job_template = """\
+general_job_template = """\
 #! /bin/bash
 #$ -cwd
 #$ -V
 #$ -S /bin/bash
 #$ -l h_vmem=8G
 #$ -l virtual_free=8G
+{queue}
 {commands}
 """
 
@@ -37,6 +38,9 @@ def main():
     parser.add_argument("-z", "--random-seed",
             default=None,
             help="Seed for random number generator engine.")
+    parser.add_argument("-q", "--queue",
+            default="long",
+            help="Name of queue to use (default: '%(default)s')")
     # parser.add_argument("--ngens",
     #         type=int,
     #         default=1000000,
@@ -58,6 +62,10 @@ def main():
         source_venv = "source {}".format(venv_activate)
     else:
         source_venv = ""
+    if args.queue:
+        queue = "#$ -q {}".format(args.queue)
+    else:
+        queue = ""
     # python_path = "python3"
     # supertramp_path = os.path.abspath(os.path.join(
     #         os.path.dirname(__file__),
@@ -82,7 +90,6 @@ def main():
             ]
     dispersal_rates = [1e-6, 1e-4, 1e-2]
     niche_evolution_probs = [1e-3, 1e-1, 1]
-
     run_manifest = {}
     for ngens in (int(x) for x in (1e4, 1e6)):
         for dm_idx, dispersal_model in enumerate(dispersal_models):
@@ -115,8 +122,11 @@ def main():
                         commands.append(run_cmd)
                         job_filepath = stem + ".job"
                         with open(job_filepath, "w") as jobf:
-                            template = kwyjibo_job_template
-                            jobf.write(template.format(commands="\n".join(commands)))
+                            template = general_job_template
+                            jobf.write(template.format(
+                                commands="\n".join(commands),
+                                queue=queue,
+                                ))
                         run_manifest[output_prefix] = {
                                 "dispersal_model"       : dispersal_model,
                                 "s0"                    : s0,
