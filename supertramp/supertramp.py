@@ -353,7 +353,7 @@ class Island(object):
                         island1=self.label,
                         island2=dest_island.label,
                         habitat_type=lineage.habitat_type,
-                        lineage=lineage.label))
+                        lineage=lineage.logging_label))
                     dest_island.receive_migrant(lineage=lineage, habitat_type=lineage.habitat_type)
 
     def process_migrants(self):
@@ -421,6 +421,10 @@ class Lineage(dendropy.Node):
     def _set_label(self, v):
         self._label = v
     label = property(_get_label, _set_label)
+
+    def _get_logging_label(self):
+        return "S{:d}.{}".format(self.index, self.distribution_label)
+    logging_label = property(_get_logging_label)
 
     @property
     def distribution_label(self):
@@ -718,50 +722,50 @@ class System(object):
                     print(self.phylogeny._as_newick_string())
                 assert str(nd.habitat_types) != "000"
 
-    def run_lineage_birth_0(self):
-        # - Each lineage has a probability of splitting given by
-        #   the sum of the local birth rates for the lineage across all
-        #   habitats in which it occurs.
-        # - The probability that a particular lineage in a particular habitat
-        #   speciates, given that the lineage has split in that generation,
-        #   is given by the local (habitat-specific) birth rate normalized by
-        #   the sum of birth rates across all habitats.
-        # - In any particular generation, a particular lineage splits at most
-        #   once.
-        lineage_splitting_rates = collections.defaultdict(list)
-        lineage_splitting_habitat_localities = collections.defaultdict(list)
-        for island in self.islands:
-            for habitat in island.habitat_list:
-                if not habitat.lineages:
-                    continue
-                splitting_rate = self.diversification_model_s0 * (len(habitat.lineages) ** self.diversification_model_a)
-                for lineage in habitat.lineages:
-                    lineage_splitting_rates[lineage].append(splitting_rate)
-                    lineage_splitting_habitat_localities[lineage].append(habitat)
-        for lineage in lineage_splitting_rates:
-            total_rate = sum(lineage_splitting_rates[lineage])
-            if self.rng.uniform(0, 1) <= total_rate:
-                # print(">>> {}: splitting: {}:{}".format(self.current_gen, lineage, lineage.label))
-                c0, c1 = lineage.diversify(finalize_distribution_label=True)
-                if _DEBUG_MODE:
-                    try:
-                        self.phylogeny._debug_check_tree()
-                    except AttributeError:
-                        self.phylogeny.debug_check_tree()
-                if len(self.habitat_types) > 1 and self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
-                    c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
-                selected_habitat_idx = weighted_index_choice(lineage_splitting_rates[lineage],
-                        self.rng)
-                # selected_habitat = lineage_split_habitat_localities[selected_habitat_idx]
-                for habitat_idx, habitat in enumerate(lineage_splitting_habitat_localities[lineage]):
-                    habitat.remove_lineage(lineage)
-                    if habitat_idx == selected_habitat_idx:
-                        # sympatric speciation: "old" species retained in original habitat on island
-                        # new species added to new habitat on island
-                        habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
-                        habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
-                    else:
-                        habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+    # def run_lineage_birth_0(self):
+    #     # - Each lineage has a probability of splitting given by
+    #     #   the sum of the local birth rates for the lineage across all
+    #     #   habitats in which it occurs.
+    #     # - The probability that a particular lineage in a particular habitat
+    #     #   speciates, given that the lineage has split in that generation,
+    #     #   is given by the local (habitat-specific) birth rate normalized by
+    #     #   the sum of birth rates across all habitats.
+    #     # - In any particular generation, a particular lineage splits at most
+    #     #   once.
+    #     lineage_splitting_rates = collections.defaultdict(list)
+    #     lineage_splitting_habitat_localities = collections.defaultdict(list)
+    #     for island in self.islands:
+    #         for habitat in island.habitat_list:
+    #             if not habitat.lineages:
+    #                 continue
+    #             splitting_rate = self.diversification_model_s0 * (len(habitat.lineages) ** self.diversification_model_a)
+    #             for lineage in habitat.lineages:
+    #                 lineage_splitting_rates[lineage].append(splitting_rate)
+    #                 lineage_splitting_habitat_localities[lineage].append(habitat)
+    #     for lineage in lineage_splitting_rates:
+    #         total_rate = sum(lineage_splitting_rates[lineage])
+    #         if self.rng.uniform(0, 1) <= total_rate:
+    #             # print(">>> {}: splitting: {}:{}".format(self.current_gen, lineage, lineage.label))
+    #             c0, c1 = lineage.diversify(finalize_distribution_label=True)
+    #             if _DEBUG_MODE:
+    #                 try:
+    #                     self.phylogeny._debug_check_tree()
+    #                 except AttributeError:
+    #                     self.phylogeny.debug_check_tree()
+    #             if len(self.habitat_types) > 1 and self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
+    #                 c1.habitat_type = self.rng.choice([ h for h in self.habitat_types if h is not c1.habitat_type ])
+    #             selected_habitat_idx = weighted_index_choice(lineage_splitting_rates[lineage],
+    #                     self.rng)
+    #             # selected_habitat = lineage_split_habitat_localities[selected_habitat_idx]
+    #             for habitat_idx, habitat in enumerate(lineage_splitting_habitat_localities[lineage]):
+    #                 habitat.remove_lineage(lineage)
+    #                 if habitat_idx == selected_habitat_idx:
+    #                     # sympatric speciation: "old" species retained in original habitat on island
+    #                     # new species added to new habitat on island
+    #                     habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+    #                     habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
+    #                 else:
+    #                     habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
 
     def run_lineage_birth_1(self):
         # - Each lineage in each habitat has an (independent) probability of
@@ -786,18 +790,14 @@ class System(object):
                     if self.rng.uniform(0, 1) <= splitting_rate:
                         lineage_splitting_habitat_localities[lineage].add(habitat)
         for lineage in lineage_splitting_habitat_localities:
-
             splitting_habitats = lineage_splitting_habitat_localities[lineage]
-
             children = lineage.diversify(finalize_distribution_label=True,
                     nsplits=len(splitting_habitats))
-
-            self.run_logger.debug("Lineage {splitting_lineage} splitting in {num_islands} islands: {islands}".format(
-                splitting_lineage=lineage.label,
+            self.run_logger.debug("Lineage {splitting_lineage} speciating in {num_islands} islands: {islands}".format(
+                splitting_lineage=lineage.logging_label,
                 num_islands=len(splitting_habitats),
-                islands=[habitat.island.label for habitat in splitting_habitats],
+                islands=",".join([habitat.island.label for habitat in splitting_habitats]),
                 ))
-
             assert len(children) == len(splitting_habitats) + 1
             if _DEBUG_MODE:
                 try:
@@ -820,8 +820,20 @@ class System(object):
                     c1 = c_remaining.pop()
                     habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
                     habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
+                    self.run_logger.debug("Lineage {splitting_lineage} speciating to {daughter_lineage1} in island {island}".format(
+                        splitting_lineage=lineage.logging_label,
+                        daughter_lineage0=c0.logging_label,
+                        daughter_lineage1=c1.logging_label,
+                        island=habitat.island.label,
+                        ))
                 else:
                     habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+                    self.run_logger.debug("Lineage {splitting_lineage} continuing as {daughter_lineage0} in island {island}".format(
+                        splitting_lineage=lineage.logging_label,
+                        daughter_lineage0=c0.logging_label,
+                        daughter_lineage1=c1.logging_label,
+                        island=habitat.island.label,
+                        ))
             assert len(c_remaining) == 0
 
     def run_lineage_death_1(self):
@@ -854,11 +866,18 @@ class System(object):
                     if self.rng.uniform(0, 1) <= death_rate:
                         to_remove.append(lineage)
                 for lineage in to_remove:
+                    self.run_logger.debug("Lineage {lineage} extirpated from island {island}".format(
+                        lineage=lineage.logging_label,
+                        island=habitat.island.label,
+                        ))
                     habitat.remove_lineage(lineage)
                     lineage_counts.subtract([lineage])
         for lineage in lineage_counts:
             count = lineage_counts[lineage]
             if count == 0:
+                self.run_logger.debug("Lineage {lineage} extirpated from all islands and is now globally extinct".format(
+                    lineage=lineage.logging_label,
+                    ))
                 if lineage is self.phylogeny.seed_node:
                     raise TotalExtinctionException()
                 else:
@@ -878,96 +897,97 @@ class System(object):
                         break
                 assert found, lineage
 
-    def run_lineage_death_2(self):
-        # - Each lineage in each habitat has a probability of going
-        #   locally-extinct (i.e., extirpated from a particular habitat)
-        #   based on its local (habitat-specific) death rate.
-        # - A particular lineage's probability of going extinct in a particular
-        #   habitat is independent of the any other lineage going extinct in
-        #   the same or any other habitat.
-        # - A lineage can only be extirpated from a single habitat
-        #   in any given generation.
-        # - Once a lineage is no longer present in any habitat across all
-        #   islands, it is considered to have gone globally-extinct and
-        #   removed from the system.
-        lineage_death_rates = collections.defaultdict(list)
-        lineage_death_habitat_localities = collections.defaultdict(list)
-        lineage_counts = collections.Counter()
-        for island in self.islands:
-            for habitat in island.habitat_list:
-                lineage_counts.update(habitat.lineages)
-                if not habitat.lineages:
-                    continue
-                death_rate = self.diversification_model_e0 * (len(habitat.lineages) ** self.diversification_model_b)
-                for lineage in habitat.lineages:
-                    lineage_death_rates[lineage].append(death_rate)
-                    lineage_death_habitat_localities[lineage].append(habitat)
-        to_remove = []
-        for lineage in lineage_death_rates:
-            total_rate = sum(lineage_death_rates[lineage])
-            if self.rng.uniform(0, 1) <= total_rate:
-                # print(">>> {}: death: {}:{}".format(self.current_gen, lineage, lineage.label))
-                selected_habitat_idx = weighted_index_choice(lineage_death_rates[lineage],
-                        self.rng)
-                to_remove.append( (lineage, lineage_death_habitat_localities[lineage][selected_habitat_idx]) )
-        for lineage, habitat in to_remove:
-            habitat.remove_lineage(lineage)
-            lineage_counts.subtract([lineage])
-        for lineage in lineage_counts:
-            count = lineage_counts[lineage]
-            if count == 0:
-                if lineage is self.phylogeny.seed_node:
-                    raise TotalExtinctionException()
-                else:
-                    self.phylogeny.prune_subtree(node=lineage,
-                            update_splits=False, delete_outdegree_one=True)
-                    if self.phylogeny.seed_node.num_child_nodes() == 0:
-                        raise TotalExtinctionException()
-            elif _DEBUG_MODE:
-                ## sanity checking ...
-                found = True
-                for island in self.islands:
-                    for habitat in island.habitat_list:
-                        if lineage in habitat.lineages:
-                            found = True
-                            break
-                    if found:
-                        break
-                assert found, lineage
+    # def run_lineage_death_2(self):
+    #     # - Each lineage in each habitat has a probability of going
+    #     #   locally-extinct (i.e., extirpated from a particular habitat)
+    #     #   based on its local (habitat-specific) death rate.
+    #     # - A particular lineage's probability of going extinct in a particular
+    #     #   habitat is independent of the any other lineage going extinct in
+    #     #   the same or any other habitat.
+    #     # - A lineage can only be extirpated from a single habitat
+    #     #   in any given generation.
+    #     # - Once a lineage is no longer present in any habitat across all
+    #     #   islands, it is considered to have gone globally-extinct and
+    #     #   removed from the system.
+    #     lineage_death_rates = collections.defaultdict(list)
+    #     lineage_death_habitat_localities = collections.defaultdict(list)
+    #     lineage_counts = collections.Counter()
+    #     for island in self.islands:
+    #         for habitat in island.habitat_list:
+    #             lineage_counts.update(habitat.lineages)
+    #             if not habitat.lineages:
+    #                 continue
+    #             death_rate = self.diversification_model_e0 * (len(habitat.lineages) ** self.diversification_model_b)
+    #             for lineage in habitat.lineages:
+    #                 lineage_death_rates[lineage].append(death_rate)
+    #                 lineage_death_habitat_localities[lineage].append(habitat)
+    #     to_remove = []
+    #     for lineage in lineage_death_rates:
+    #         total_rate = sum(lineage_death_rates[lineage])
+    #         if self.rng.uniform(0, 1) <= total_rate:
+    #             # print(">>> {}: death: {}:{}".format(self.current_gen, lineage, lineage.label))
+    #             selected_habitat_idx = weighted_index_choice(lineage_death_rates[lineage],
+    #                     self.rng)
+    #             to_remove.append( (lineage, lineage_death_habitat_localities[lineage][selected_habitat_idx]) )
+    #     for lineage, habitat in to_remove:
+    #         habitat.remove_lineage(lineage)
+    #         lineage_counts.subtract([lineage])
+    #     for lineage in lineage_counts:
+    #         count = lineage_counts[lineage]
+    #         if count == 0:
+    #             if lineage is self.phylogeny.seed_node:
+    #                 raise TotalExtinctionException()
+    #             else:
+    #                 self.phylogeny.prune_subtree(node=lineage,
+    #                         update_splits=False, delete_outdegree_one=True)
+    #                 if self.phylogeny.seed_node.num_child_nodes() == 0:
+    #                     raise TotalExtinctionException()
+    #         elif _DEBUG_MODE:
+    #             ## sanity checking ...
+    #             found = True
+    #             for island in self.islands:
+    #                 for habitat in island.habitat_list:
+    #                     if lineage in habitat.lineages:
+    #                         found = True
+    #                         break
+    #                 if found:
+    #                     break
+    #             assert found, lineage
 
-    def run_lineage_death_3(self):
-        # - Each lineage has a probability of going globally-extinct given by
-        #   the sum of the local death rates for the lineage across all
-        #   habitats in which it occurs.
-        # - A particular lineage's probability of going extinct in a
-        #   particular habitat is independent of the any other lineage going
-        #   extinct in the same or any other habitat.
-        lineage_death_rates = collections.defaultdict(list)
-        lineage_death_habitat_localities = collections.defaultdict(list)
-        lineage_counts = collections.Counter()
-        for island in self.islands:
-            for habitat in island.habitat_list:
-                lineage_counts.update(habitat.lineages)
-                if not habitat.lineages:
-                    continue
-                death_rate = self.diversification_model_e0 * (len(habitat.lineages) ** self.diversification_model_b)
-                for lineage in habitat.lineages:
-                    lineage_death_rates[lineage].append(death_rate)
-                    lineage_death_habitat_localities[lineage].append(habitat)
-        for lineage in lineage_death_rates:
-            total_rate = sum(lineage_death_rates[lineage])
-            if self.rng.uniform(0, 1) <= total_rate:
-                for island in self.islands:
-                    for habitat in island.habitat_list:
-                        if lineage in habitat.lineages:
-                            habitat.remove_lineage(lineage)
-                if lineage is self.phylogeny.seed_node:
-                    raise TotalExtinctionException()
-                else:
-                    self.phylogeny.prune_subtree(node=lineage,
-                            update_splits=False, delete_outdegree_one=True)
-                    if self.phylogeny.seed_node.num_child_nodes() == 0:
-                        raise TotalExtinctionException()
+    # def run_lineage_death_3(self):
+    #     # - Each lineage has a probability of going globally-extinct given by
+    #     #   the sum of the local death rates for the lineage across all
+    #     #   habitats in which it occurs.
+    #     # - A particular lineage's probability of going extinct in a
+    #     #   particular habitat is independent of the any other lineage going
+    #     #   extinct in the same or any other habitat.
+    #     lineage_death_rates = collections.defaultdict(list)
+    #     lineage_death_habitat_localities = collections.defaultdict(list)
+    #     lineage_counts = collections.Counter()
+    #     for island in self.islands:
+    #         for habitat in island.habitat_list:
+    #             lineage_counts.update(habitat.lineages)
+    #             if not habitat.lineages:
+    #                 continue
+    #             death_rate = self.diversification_model_e0 * (len(habitat.lineages) ** self.diversification_model_b)
+    #             for lineage in habitat.lineages:
+    #                 lineage_death_rates[lineage].append(death_rate)
+    #                 lineage_death_habitat_localities[lineage].append(habitat)
+    #     for lineage in lineage_death_rates:
+    #         total_rate = sum(lineage_death_rates[lineage])
+    #         if self.rng.uniform(0, 1) <= total_rate:
+    #             for island in self.islands:
+    #                 for habitat in island.habitat_list:
+    #                     if lineage in habitat.lineages:
+    #                         habitat.remove_lineage(lineage)
+    #             if lineage is self.phylogeny.seed_node:
+    #                 raise TotalExtinctionException()
+    #             else:
+    #                 self.phylogeny.prune_subtree(node=lineage,
+    #                         update_splits=False, delete_outdegree_one=True)
+    #                 if self.phylogeny.seed_node.num_child_nodes() == 0:
+    #                     raise TotalExtinctionException()
+
     # def run_simple_birth(self):
     #     tips = self.phylogeny.leaf_nodes()
     #     if not tips:
