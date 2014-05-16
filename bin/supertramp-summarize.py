@@ -229,6 +229,10 @@ def main():
             "source_paths",
             nargs="+",
             help="Path(s) to directory or directories with simulation generated files.")
+    parser.add_argument(
+            "-o", "--output-root-dir",
+            default='processed',
+            help="Output directory root (default: '%(default)s').")
     args = parser.parse_args()
     args.quiet = False
 
@@ -241,11 +245,12 @@ def main():
     param_keys["niche.evolution.prob"] = "niche_evolution_prob"
 
     summaries = []
+    output_root_dir = args.output_root_dir
+    output_dir = output_root_dir
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     for source_path in args.source_paths:
         source_dir = os.path.abspath(os.path.expanduser(os.path.expandvars(source_path)))
-        output_dir = os.path.join(source_dir, "processed")
-        if not os.path.exists(output_dir):
-            os.mkdir(output_dir)
         run_manifest_path = os.path.join(source_dir, "run-manifest.json")
         if not os.path.exists(run_manifest_path):
             sys.exit("Manifest file not found: {}".format(run_manifest_path))
