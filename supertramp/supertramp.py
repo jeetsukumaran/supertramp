@@ -494,9 +494,10 @@ class TotalExtinctionException(Exception):
 class System(object):
 
     def __init__(self, **kwargs):
-        self.run_lineage_birth = self.run_lineage_birth_1
-        self.run_lineage_death = self.run_lineage_death_1
+        # self.run_lineage_birth = self.run_lineage_birth_1
+        # self.run_lineage_death = self.run_lineage_death_1
         self.configure(kwargs)
+        self.sympatric_speciation = False
 
     def configure(self, configd):
 
@@ -767,7 +768,7 @@ class System(object):
     #                 else:
     #                     habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
 
-    def run_lineage_birth_1(self):
+    def run_lineage_birth(self):
         # - Each lineage in each habitat has an (independent) probability of
         #   splitting given by the habitat-specific birth rate.
         # - A particular lineage's probability of splitting in a particular
@@ -791,6 +792,15 @@ class System(object):
                         lineage_splitting_habitat_localities[lineage].add(habitat)
         for lineage in lineage_splitting_habitat_localities:
             splitting_habitats = lineage_splitting_habitat_localities[lineage]
+            if not self.sympatric_speciation:
+                if len(lineage_habitats[lineage]) == 1:
+                    # lineage occurs only in a habitat of only one island;
+                    # since sympatric speciation is disallowed: skipped
+                    continue
+                if len(lineage_habitats[lineage]) == len(splitting_habitats):
+                    # lineage in splitting in every island in which it occurs;
+                    # since sympatric speciation is disallowed: drop one
+                    splitting_habitats.remove(self.rng.choice(splitting_habitats))
             children = lineage.diversify(finalize_distribution_label=True,
                     nsplits=len(splitting_habitats))
             self.run_logger.debug("Lineage {splitting_lineage} speciating in {num_islands} islands: {islands}".format(
@@ -812,13 +822,11 @@ class System(object):
                 for c1 in c_remaining:
                     if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
                         c1.habitat_type = self.rng.choice(habitats_to_evolve_into)
+            c0_placed = False
             for habitat in lineage_habitats[lineage]:
                 habitat.remove_lineage(lineage)
                 if habitat in splitting_habitats:
-                    # sympatric speciation: "old" species retained in original habitat on island
-                    # new species added to new habitat on island
                     c1 = c_remaining.pop()
-                    habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
                     habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
                     self.run_logger.debug("Lineage {splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') speciating to {daughter_lineage1} (with habitat type '{daughter_lineage1_habitat_type}') in island {island}".format(
                         splitting_lineage=lineage.logging_label,
@@ -828,8 +836,19 @@ class System(object):
                         daughter_lineage1_habitat_type=c1.habitat_type.label,
                         island=habitat.island.label,
                         ))
+                    if self.sympatric_speciation:
+                        habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+                        self.run_logger.debug("Lineage {splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') continuing as {daughter_lineage0} in island {island}".format(
+                            splitting_lineage=lineage.logging_label,
+                            splitting_lineage_habitat_type=lineage.habitat_type.label,
+                            daughter_lineage0=c0.logging_label,
+                            daughter_lineage1=c1.logging_label,
+                            daughter_lineage1_habitat_type=c1.habitat_type.label,
+                            island=habitat.island.label,
+                            ))
                 else:
                     habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+                    c0_placed = True
                     self.run_logger.debug("Lineage {splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') continuing as {daughter_lineage0} in island {island}".format(
                         splitting_lineage=lineage.logging_label,
                         splitting_lineage_habitat_type=lineage.habitat_type.label,
@@ -838,9 +857,10 @@ class System(object):
                         daughter_lineage1_habitat_type=c1.habitat_type.label,
                         island=habitat.island.label,
                         ))
+            assert c0_placed
             assert len(c_remaining) == 0
 
-    def run_lineage_death_1(self):
+    def run_lineage_death(self):
         # - Each lineage in each habitat has an (independent) probability of
         #   going locally extinct (i.e., extirpated from a particular
         #   habitat) given by the local, habitat-specific death rate.
