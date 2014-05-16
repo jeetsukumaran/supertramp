@@ -37,10 +37,10 @@ def main():
     parser.add_argument("-z", "--random-seed",
             default=None,
             help="Seed for random number generator engine.")
-    parser.add_argument("--ngens",
-            type=int,
-            default=1000000,
-            help="Number of generations to run (default = %(default)s).")
+    # parser.add_argument("--ngens",
+    #         type=int,
+    #         default=1000000,
+    #         help="Number of generations to run (default = %(default)s).")
     parser.add_argument("--nreps",
             type=int,
             default=10,
@@ -71,6 +71,8 @@ def main():
 
     # Expected equilibirum species richness, per habitat (per island): 10(30), 20(60), 40(120)
     diversification_model_s0e0 = [
+            (1e-1, 1e-2),
+            (1e-1, 1e-3),
             (1e-2, 1e-3),
             (1e-2, 1e-4),
             (1e-4, 1e-5),
@@ -78,52 +80,53 @@ def main():
             (1e-6, 1e-7),
             (1e-6, 1e-8),
             ]
-    dispersal_rates = [1e-6, 1e-4,]
-    niche_evolution_probs = [1e-3, 1e-1,]
+    dispersal_rates = [1e-6, 1e-4, 1e-2]
+    niche_evolution_probs = [1e-3, 1e-1, 1]
 
     run_manifest = {}
-    for dm_idx, dispersal_model in enumerate(dispersal_models):
-        for br_idx, (s0,e0) in enumerate(diversification_model_s0e0):
-            for drf_idx, dispersal_rate in enumerate(dispersal_rates):
-                for nef_idx, niche_evolution_prob in enumerate(niche_evolution_probs):
-                    stem = "{dispersal_model}_s{s0:10.8f}_e{e0:10.8f}_r{dispersal_rate:10.8f}_n{niche_evolution_prob:10.8f}".format(
-                            dispersal_model=dispersal_model,
-                            s0=s0,
-                            e0=e0,
-                            R=s0/e0,
-                            dispersal_rate=dispersal_rate,
-                            niche_evolution_prob=niche_evolution_prob)
-                    output_prefix = stem
-                    run_cmd = []
-                    run_cmd.append(supertramp_path)
-                    run_cmd.extend(["-z", str(rng.randint(0, sys.maxsize))])
-                    run_cmd.extend(["--nreps", str(args.nreps)])
-                    run_cmd.extend(["--log-frequency", "1000"])
-                    run_cmd.extend(["-s", str(s0)])
-                    run_cmd.extend(["-e", str(e0)])
-                    run_cmd.extend(["--niche-evolution-probability", str(niche_evolution_prob)])
-                    run_cmd.extend(["--dispersal-rate", str(dispersal_rate)])
-                    run_cmd.extend(["--ngens", str(args.ngens)])
-                    run_cmd.extend(["--output-prefix", output_prefix])
-                    run_cmd.extend(["--dispersal-model", dispersal_model])
-                    run_cmd = " ".join(run_cmd)
-                    commands = []
-                    if source_venv:
-                        commands.append(source_venv)
-                    commands.append(run_cmd)
-                    job_filepath = stem + ".job"
-                    with open(job_filepath, "w") as jobf:
-                        template = kwyjibo_job_template
-                        jobf.write(template.format(commands="\n".join(commands)))
-                    run_manifest[output_prefix] = {
-                            "dispersal_model"       : dispersal_model,
-                            "s0"                    : s0,
-                            "e0"                    : e0,
-                            "dispersal_rate"        : dispersal_rate,
-                            "niche_evolution_prob"  : niche_evolution_prob,
-                            "treefile"              : output_prefix + ".trees",
-                            "logfile"              : output_prefix + ".log",
-                            }
+    for ngens in (int(x) for x in (1e4, 1e6)):
+        for dm_idx, dispersal_model in enumerate(dispersal_models):
+            for br_idx, (s0,e0) in enumerate(diversification_model_s0e0):
+                for drf_idx, dispersal_rate in enumerate(dispersal_rates):
+                    for nef_idx, niche_evolution_prob in enumerate(niche_evolution_probs):
+                        stem = "{dispersal_model}_s{s0:10.8f}_e{e0:10.8f}_r{dispersal_rate:10.8f}_n{niche_evolution_prob:10.8f}".format(
+                                dispersal_model=dispersal_model,
+                                s0=s0,
+                                e0=e0,
+                                dispersal_rate=dispersal_rate,
+                                niche_evolution_prob=niche_evolution_prob)
+                        output_prefix = stem
+                        run_cmd = []
+                        run_cmd.append(supertramp_path)
+                        run_cmd.extend(["-z", str(rng.randint(0, sys.maxsize))])
+                        run_cmd.extend(["--nreps", str(args.nreps)])
+                        run_cmd.extend(["--log-frequency", "10000"])
+                        run_cmd.extend(["-s", str(s0)])
+                        run_cmd.extend(["-e", str(e0)])
+                        run_cmd.extend(["--niche-evolution-probability", str(niche_evolution_prob)])
+                        run_cmd.extend(["--dispersal-rate", str(dispersal_rate)])
+                        run_cmd.extend(["--ngens", str(ngens)])
+                        run_cmd.extend(["--output-prefix", output_prefix])
+                        run_cmd.extend(["--dispersal-model", dispersal_model])
+                        run_cmd = " ".join(run_cmd)
+                        commands = []
+                        if source_venv:
+                            commands.append(source_venv)
+                        commands.append(run_cmd)
+                        job_filepath = stem + ".job"
+                        with open(job_filepath, "w") as jobf:
+                            template = kwyjibo_job_template
+                            jobf.write(template.format(commands="\n".join(commands)))
+                        run_manifest[output_prefix] = {
+                                "dispersal_model"       : dispersal_model,
+                                "s0"                    : s0,
+                                "e0"                    : e0,
+                                "dispersal_rate"        : dispersal_rate,
+                                "niche_evolution_prob"  : niche_evolution_prob,
+                                "ngens"                 : ngens,
+                                "treefile"              : output_prefix + ".trees",
+                                "logfile"               : output_prefix + ".log",
+                                }
     with open("run-manifest.json", "w") as manifestf:
         json.dump(run_manifest, manifestf)
 if __name__ == "__main__":
