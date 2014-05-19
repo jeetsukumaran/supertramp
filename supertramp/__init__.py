@@ -34,25 +34,32 @@ import os
 
 __project__ = "Supertramp"
 __version__ = "0.1.0"
+__supertramp_revision__ = None
+__supertramp_description__ = None
 
 def revision():
-    from dendropy.utility import vcsinfo
-    try:
+    global __supertramp_revision__
+    if __supertramp_revision__ is None:
+        from dendropy.utility import vcsinfo
         try:
-            __homedir__ = os.path.dirname(os.path.abspath(__file__))
-        except IndexError:
-            __homedir__ = os.path.dirname(os.path.abspath(__file__))
-    except OSError:
-        __homedir__ = None
-    except:
-        __homedir__ = None
-    __revision__ = vcsinfo.Revision(repo_path=__homedir__)
-    return __revision__
+            try:
+                __homedir__ = os.path.dirname(os.path.abspath(__file__))
+            except IndexError:
+                __homedir__ = os.path.dirname(os.path.abspath(__file__))
+        except OSError:
+            __homedir__ = None
+        except:
+            __homedir__ = None
+        __supertramp_revision__ = vcsinfo.Revision(repo_path=__homedir__)
+    return __supertramp_revision__
 
 def description():
-    __revision__ = revision()
-    if __revision__.is_available:
-        revision_text = " ({})".format(__revision__)
-    else:
-        revision_text = ""
-    return "{} {}{}".format(__project__, __version__, revision_text)
+    global __supertramp_description__
+    if __supertramp_description__ is None:
+        supertramp_revision = revision()
+        if supertramp_revision.is_available:
+            revision_text = " ({})".format(supertramp_revision)
+        else:
+            revision_text = ""
+        __supertramp_description__  = "{} {}{}".format(__project__, __version__, revision_text)
+    return __supertramp_description__

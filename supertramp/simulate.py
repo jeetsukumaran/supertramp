@@ -39,6 +39,7 @@ import sys
 import random
 import collections
 import json
+import supertramp
 from supertramp import utility
 from supertramp.BitVector import BitVector
 import dendropy
@@ -331,7 +332,7 @@ class TotalExtinctionException(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
 
-class System(object):
+class SupertrampSimulator(object):
 
     def __init__(self, **kwargs):
         self.configure(kwargs)
@@ -818,4 +819,91 @@ class System(object):
         self.report_trees()
         self.report_general_stats()
 
+def repeat_run_supertramp(
+        model_params_d,
+        ngens,
+        nreps,
+        output_prefix,
+        random_seed="None",
+        stderr_logging_level="info",
+        file_logging_level="debug"):
+    """
+    Executes multiple runs of the Supertramp simulator under identical
+    parameters to produce the specified number of replicates, discarding failed
+    runs.
 
+    Parameters
+    ----------
+    model_params_d : dict
+        Simulator model parameters as keyword-value pairs. To be re-used for
+        each replicate.
+    ngens : integer
+        Number of generations for which to run each individual replicate.
+    nreps : integer
+        Number of replicates to produce. f
+    output_prefix : string
+        Path prefix for output files.
+    random_seed : integer
+        Random seed to be used (for single random number generator across all
+        replicates).
+    stderr_logging_level : string or None
+        Message level threshold for screen logs; if 'none' or `None`, screen
+        logs will be supprsed.
+    file_logging_level : string or None
+        Message level threshold for file logs; if 'none' or `None`, file
+        logs will be supprsed.
+    """
+    configd = dict(model_params_d)
+    if stderr_logging_level is None or stderr_logging_level.lower() == "none":
+        log_to_stderr = False
+    else:
+        log_to_stderr = True
+    if file_logging_level is None or file_logging_level.lower() == "none":
+        log_to_file = False
+    else:
+        log_to_file = True
+    configd["run_logger"] = utility.RunLogger(
+            name="supertramp",
+            log_path=output_prefix + ".log",
+            log_to_stderr=log_to_stderr,
+            stderr_logging_level=stderr_logging_level,
+            log_to_file=log_to_file,
+            file_logging_level=file_logging_level,
+            )
+    run_logger = configd["run_logger"]
+    run_logger.info("Starting: {}".format(supertramp.description()))
+    if random_seed is None:
+        random_seed = random.randint(0, sys.maxsize)
+    run_logger.info("Initializing with random seed: {}".format(random_seed))
+    configd["rng"] = random.Random(random_seed)
+    configd["tree_log"] = open(output_prefix + ".trees",
+            "w")
+    configd["general_stats_log"] = open(output_prefix + ".general_stats.txt",
+            "w")
+    configd["general_stats_log"].header_written = False
+    header_written = False
+    rep = 0
+    while rep < nreps:
+        simulation_name="Run{}".format((rep+1))
+        run_output_prefix = "{}.R{:04d}".format(output_prefix, rep+1)
+        run_logger.info("Run {} of {}: starting".format(rep+1, nreps))
+        supertramp_simulator = SupertrampSimulator(
+                name=simulation_name,
+                **configd)
+        supertramp_simulator.bootstrap()
+        success = False
+        while not success:
+            try:
+                success = supertramp_simulator.run(ngens)
+            except TotalExtinctionException:
+                run_logger.info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, nreps, supertramp_simulator.current_gen))
+                run_logger.info("Run {} of {}: restarting".format(rep+1, nreps))
+                supertramp_simulator = SupertrampSimulator(
+                        name=simulation_name,
+                        **configd)
+                supertramp_simulator.bootstrap()
+            else:
+                run_logger.info("Run {} of {}: completed to termination condition of {} generations".format(rep+1, nreps, ngens))
+                supertramp_simulator.report()
+                break
+        rep += 1

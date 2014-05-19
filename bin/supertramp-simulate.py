@@ -37,13 +37,11 @@ import argparse
 import random
 import logging
 import supertramp
-from supertramp import utility
 from supertramp import simulate
-
-_version_info = supertramp.description()
+from supertramp import utility
 
 def main():
-    parser = argparse.ArgumentParser(description="{} Biogeographical simulator".format(_version_info))
+    parser = argparse.ArgumentParser(description="{} Biogeographical simulator".format(supertramp.description()))
 
     run_options = parser.add_argument_group("Run Options")
     run_options.add_argument("-z", "--random-seed",
@@ -60,7 +58,7 @@ def main():
     run_options.add_argument("--file-logging-level",
             default="debug",
             help="Message level threshold for file logs.")
-    run_options.add_argument("--screen-logging-level",
+    run_options.add_argument("--stderr-logging-level",
             default="info",
             help="Message level threshold for screen logs.")
     run_options.add_argument("--debug-mode",
@@ -125,53 +123,23 @@ def main():
             type=int,
             help="Frequency that data is sampled from the simulation (default = None [final report only]).")
     args = parser.parse_args()
-    argsd = vars(args)
 
-    nreps = argsd.pop("nreps")
+    argsd = vars(args)
     ngens = argsd.pop("ngens")
+    nreps = argsd.pop("nreps")
     random_seed = argsd.pop("random_seed", None)
-    if random_seed is None:
-        random_seed = random.randint(0, sys.maxsize)
-    configd = dict(argsd)
-    configd["run_logger"] = utility.RunLogger(
-            name="supertramp",
-            log_path=args.output_prefix + ".log",
-            stderr_logging_level=configd.pop("screen_logging_level"),
-            file_logging_level=configd.pop("file_logging_level"))
-    configd["run_logger"].info("Starting: {}".format(_version_info))
-    configd["run_logger"].info("Initializing with random seed: {}".format(random_seed))
-    configd["rng"] = random.Random(random_seed)
-    configd["tree_log"] = open(configd["output_prefix"] + ".trees",
-            "w")
-    configd["general_stats_log"] = open(configd["output_prefix"] + ".general_stats.txt",
-            "w")
-    configd["general_stats_log"].header_written = False
-    header_written = False
-    rep = 0
-    while rep < nreps:
-        simulation_name="Run{}".format((rep+1))
-        run_output_prefix = "{}.R{:04d}".format(configd["output_prefix"], rep+1)
-        configd["run_logger"].info("Run {} of {}: starting".format(rep+1, nreps))
-        supertramp_system = simulate.System(
-                name=simulation_name,
-                **configd)
-        supertramp_system.bootstrap()
-        success = False
-        while not success:
-            try:
-                success = supertramp_system.run(ngens)
-            except simulate.TotalExtinctionException:
-                configd["run_logger"].info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, nreps, supertramp_system.current_gen))
-                configd["run_logger"].info("Run {} of {}: restarting".format(rep+1, nreps))
-                supertramp_system = simulate.System(
-                        name=simulation_name,
-                        **configd)
-                supertramp_system.bootstrap()
-            else:
-                configd["run_logger"].info("Run {} of {}: completed to termination condition of {} generations".format(rep+1, nreps, ngens))
-                supertramp_system.report()
-                break
-        rep += 1
+    output_prefix = argsd.pop("output_prefix", "supertramp_run")
+    stderr_logging_level=argsd.pop("stderr_logging_level")
+    file_logging_level=argsd.pop("file_logging_level")
+
+    simulate.repeat_run_supertramp(
+            model_params_d=argsd,
+            ngens=ngens,
+            nreps=nreps,
+            output_prefix=output_prefix,
+            random_seed=random_seed,
+            stderr_logging_level=stderr_logging_level,
+            file_logging_level=file_logging_level)
 
 if __name__ == "__main__":
     main()
