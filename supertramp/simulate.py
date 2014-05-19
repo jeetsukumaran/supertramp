@@ -36,50 +36,14 @@ try:
 except ImportError:
     from io import StringIO # Python 3
 import sys
-import os
 import random
-import logging
 import collections
-import inspect
 import json
+from supertramp import utility
 from supertramp.BitVector import BitVector
 import dendropy
 
-__project__ = "Supertramp"
-__version__ = "0.1.0"
-
-_LOGGING_LEVEL_ENVAR = "SUPERTRAMP_LOGGING_LEVEL"
-_LOGGING_FORMAT_ENVAR = "SUPERTRAMP_LOGGING_FORMAT"
 _DEBUG_MODE = False
-
-def revision():
-    from dendropy.utility import vcsinfo
-    try:
-        try:
-            __homedir__ = os.path.dirname(os.path.abspath(__file__))
-        except IndexError:
-            __homedir__ = os.path.dirname(os.path.abspath(__file__))
-    except OSError:
-        __homedir__ = None
-    except:
-        __homedir__ = None
-    __revision__ = vcsinfo.Revision(repo_path=__homedir__)
-    return __revision__
-
-def description():
-    __revision__ = revision()
-    if __revision__.is_available:
-        revision_text = " ({})".format(__revision__)
-    else:
-        revision_text = ""
-    return "{} {}{}".format(__project__, __version__, revision_text)
-
-def dump_stack():
-    for frame, filename, line_num, func, source_code, source_index in inspect.stack()[2:]:
-        if source_code is None:
-            print("{}: {}".format(filename, line_num))
-        else:
-            print("{}: {}: {}".format(filename, line_num, source_code[source_index].strip()))
 
 def weighted_choice(seq, weights, rng=None):
     """
@@ -117,131 +81,6 @@ def weighted_index_choice(weights, rng=None):
         rnd -= w
         if rnd < 0:
             return i
-
-class RunLogger(object):
-
-    def __init__(self, **kwargs):
-        self.name = kwargs.get("name", "RunLog")
-        self._log = logging.getLogger(self.name)
-        self._log.setLevel(logging.DEBUG)
-        self.handlers = []
-        if kwargs.get("log_to_stderr", True):
-            handler1 = logging.StreamHandler()
-            stderr_logging_level = self.get_logging_level(kwargs.get("stderr_logging_level", logging.INFO))
-            handler1.setLevel(stderr_logging_level)
-            handler1.setFormatter(self.get_default_formatter())
-            self._log.addHandler(handler1)
-            self.handlers.append(handler1)
-        if kwargs.get("log_to_file", True):
-            log_stream = kwargs.get("log_stream", \
-                open(kwargs.get("log_path", self.name + ".log"), "w"))
-            handler2 = logging.StreamHandler(log_stream)
-            file_logging_level = self.get_logging_level(kwargs.get("file_logging_level", logging.DEBUG))
-            handler2.setLevel(file_logging_level)
-            handler2.setFormatter(self.get_default_formatter())
-            self._log.addHandler(handler2)
-            self.handlers.append(handler2)
-        self._system = None
-
-    def _get_system(self):
-        return self._system
-
-    def _set_system(self, system):
-        self._system = system
-        if self._system is None:
-            for handler in self.handlers:
-                handler.setFormatter(self.get_default_formatter())
-        else:
-            for handler in self.handlers:
-                handler.setFormatter(self.get_simulation_generation_formatter())
-
-    system = property(_get_system, _set_system)
-
-    def get_logging_level(self, level=None):
-        if level in [logging.NOTSET, logging.DEBUG, logging.INFO, logging.WARNING,
-            logging.ERROR, logging.CRITICAL]:
-            return level
-        elif level is not None:
-            level_name = str(level).upper()
-        elif _LOGGING_LEVEL_ENVAR in os.environ:
-            level_name = os.environ[_LOGGING_LEVEL_ENVAR].upper()
-        else:
-            level_name = "NOTSET"
-        if level_name == "NOTSET":
-            level = logging.NOTSET
-        elif level_name == "DEBUG":
-            level = logging.DEBUG
-        elif level_name == "INFO":
-            level = logging.INFO
-        elif level_name == "WARNING":
-            level = logging.WARNING
-        elif level_name == "ERROR":
-            level = logging.ERROR
-        elif level_name == "CRITICAL":
-            level = logging.CRITICAL
-        else:
-            level = logging.NOTSET
-        return level
-
-    def get_default_formatter(self):
-        f = logging.Formatter("[%(asctime)s] %(message)s")
-        f.datefmt='%Y-%m-%d %H:%M:%S'
-        return f
-
-    def get_simulation_generation_formatter(self):
-        f = logging.Formatter("[%(asctime)s] Generation %(current_generation)s: %(message)s")
-        f.datefmt='%Y-%m-%d %H:%M:%S'
-        return f
-
-    def get_rich_formatter(self):
-        f = logging.Formatter("[%(asctime)s] %(filename)s (%(lineno)d): %(levelname) 8s: %(message)s")
-        f.datefmt='%Y-%m-%d %H:%M:%S'
-        return f
-
-    def get_simple_formatter(self):
-        return logging.Formatter("%(levelname) 8s: %(message)s")
-
-    def get_raw_formatter(self):
-        return logging.Formatter("%(message)s")
-
-    def get_logging_formatter(self, format=None):
-        if format is not None:
-            format = format.upper()
-        elif _LOGGING_FORMAT_ENVAR in os.environ:
-            format = os.environ[_LOGGING_FORMAT_ENVAR].upper()
-        if format == "RICH":
-            logging_formatter = self.get_rich_formatter()
-        elif format == "SIMPLE":
-            logging_formatter = self.get_simple_formatter()
-        elif format == "NONE":
-            logging_formatter = self.get_raw_formatter()
-        else:
-            logging_formatter = self.get_default_formatter()
-        if logging_formatter is not None:
-            logging_formatter.datefmt='%H:%M:%S'
-
-    def supplemental_info_d(self):
-        if self._system is not None:
-            return {
-                    "current_generation" : self._system.current_gen,
-                    }
-        else:
-            return None
-
-    def debug(self, msg, *args, **kwargs):
-        self._log.debug(msg, extra=self.supplemental_info_d())
-
-    def info(self, msg, *args, **kwargs):
-        self._log.info(msg, extra=self.supplemental_info_d())
-
-    def warning(self, msg, *args, **kwargs):
-        self._log.warning(msg, extra=self.supplemental_info_d())
-
-    def error(self, msg, *args, **kwargs):
-        self._log.error(msg, extra=self.supplemental_info_d())
-
-    def critical(self, msg, *args, **kwargs):
-        self._log.critical(msg, extra=self.supplemental_info_d())
 
 class HabitatType(object):
 
@@ -510,7 +349,7 @@ class System(object):
 
         self.run_logger = configd.pop("run_logger", None)
         if self.run_logger is None:
-            self.run_logger = RunLogger(name="supertramp",
+            self.run_logger = utility.RunLogger(name="supertramp",
                     log_path=self.output_prefix + ".log")
         self.run_logger.system = self
 

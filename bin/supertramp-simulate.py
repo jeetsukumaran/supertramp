@@ -36,7 +36,9 @@ import sys
 import argparse
 import random
 import logging
-from supertramp import supertramp
+import supertramp
+from supertramp import utility
+from supertramp import simulate
 
 _version_info = supertramp.description()
 
@@ -133,7 +135,7 @@ def main():
         random_seed = random.randint(0, sys.maxsize)
 
     configd = dict(argsd)
-    configd["run_logger"] = supertramp.RunLogger(
+    configd["run_logger"] = utility.RunLogger(
             name="supertramp",
             log_path=args.output_prefix + ".log",
             stderr_logging_level=configd.pop("screen_logging_level"),
@@ -152,7 +154,7 @@ def main():
         simulation_name="Run{}".format((rep+1))
         run_output_prefix = "{}.R{:04d}".format(configd["output_prefix"], rep+1)
         configd["run_logger"].info("Run {} of {}: starting".format(rep+1, nreps))
-        supertramp_system = supertramp.System(
+        supertramp_system = simulate.System(
                 name=simulation_name,
                 **configd)
         supertramp_system.bootstrap()
@@ -160,10 +162,10 @@ def main():
         while not success:
             try:
                 success = supertramp_system.run(ngens)
-            except supertramp.TotalExtinctionException:
+            except simulate.TotalExtinctionException:
                 configd["run_logger"].info("Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, nreps, supertramp_system.current_gen))
                 configd["run_logger"].info("Run {} of {}: restarting".format(rep+1, nreps))
-                supertramp_system = supertramp.System(
+                supertramp_system = simulate.System(
                         name=simulation_name,
                         **configd)
                 supertramp_system.bootstrap()

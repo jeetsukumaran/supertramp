@@ -31,11 +31,19 @@
 ##
 ##############################################################################
 
-from io import StringIO
+import os
 import logging
+import inspect
 
 _LOGGING_LEVEL_ENVAR = "SUPERTRAMP_LOGGING_LEVEL"
 _LOGGING_FORMAT_ENVAR = "SUPERTRAMP_LOGGING_FORMAT"
+
+def dump_stack():
+    for frame, filename, line_num, func, source_code, source_index in inspect.stack()[2:]:
+        if source_code is None:
+            print("{}: {}".format(filename, line_num))
+        else:
+            print("{}: {}: {}".format(filename, line_num, source_code[source_index].strip()))
 
 class RunLogger(object):
 
@@ -43,20 +51,38 @@ class RunLogger(object):
         self.name = kwargs.get("name", "RunLog")
         self._log = logging.getLogger(self.name)
         self._log.setLevel(logging.DEBUG)
+        self.handlers = []
         if kwargs.get("log_to_stderr", True):
-            ch1 = logging.StreamHandler()
+            handler1 = logging.StreamHandler()
             stderr_logging_level = self.get_logging_level(kwargs.get("stderr_logging_level", logging.INFO))
-            ch1.setLevel(stderr_logging_level)
-            ch1.setFormatter(self.get_default_formatter())
-            self._log.addHandler(ch1)
+            handler1.setLevel(stderr_logging_level)
+            handler1.setFormatter(self.get_default_formatter())
+            self._log.addHandler(handler1)
+            self.handlers.append(handler1)
         if kwargs.get("log_to_file", True):
             log_stream = kwargs.get("log_stream", \
                 open(kwargs.get("log_path", self.name + ".log"), "w"))
-            ch2 = logging.StreamHandler(log_stream)
+            handler2 = logging.StreamHandler(log_stream)
             file_logging_level = self.get_logging_level(kwargs.get("file_logging_level", logging.DEBUG))
-            ch2.setLevel(file_logging_level)
-            ch2.setFormatter(self.get_default_formatter())
-            self._log.addHandler(ch2)
+            handler2.setLevel(file_logging_level)
+            handler2.setFormatter(self.get_default_formatter())
+            self._log.addHandler(handler2)
+            self.handlers.append(handler2)
+        self._system = None
+
+    def _get_system(self):
+        return self._system
+
+    def _set_system(self, system):
+        self._system = system
+        if self._system is None:
+            for handler in self.handlers:
+                handler.setFormatter(self.get_default_formatter())
+        else:
+            for handler in self.handlers:
+                handler.setFormatter(self.get_simulation_generation_formatter())
+
+    system = property(_get_system, _set_system)
 
     def get_logging_level(self, level=None):
         if level in [logging.NOTSET, logging.DEBUG, logging.INFO, logging.WARNING,
@@ -89,6 +115,11 @@ class RunLogger(object):
         f.datefmt='%Y-%m-%d %H:%M:%S'
         return f
 
+    def get_simulation_generation_formatter(self):
+        f = logging.Formatter("[%(asctime)s] Generation %(current_generation)s: %(message)s")
+        f.datefmt='%Y-%m-%d %H:%M:%S'
+        return f
+
     def get_rich_formatter(self):
         f = logging.Formatter("[%(asctime)s] %(filename)s (%(lineno)d): %(levelname) 8s: %(message)s")
         f.datefmt='%Y-%m-%d %H:%M:%S'
@@ -116,18 +147,26 @@ class RunLogger(object):
         if logging_formatter is not None:
             logging_formatter.datefmt='%H:%M:%S'
 
+    def supplemental_info_d(self):
+        if self._system is not None:
+            return {
+                    "current_generation" : self._system.current_gen,
+                    }
+        else:
+            return None
+
     def debug(self, msg, *args, **kwargs):
-        self._log.debug(msg, *args, **kwargs)
+        self._log.debug(msg, extra=self.supplemental_info_d())
 
     def info(self, msg, *args, **kwargs):
-        self._log.info(msg, *args, **kwargs)
+        self._log.info(msg, extra=self.supplemental_info_d())
 
     def warning(self, msg, *args, **kwargs):
-        self._log.warning(msg, *args, **kwargs)
+        self._log.warning(msg, extra=self.supplemental_info_d())
 
     def error(self, msg, *args, **kwargs):
-        self._log.error(msg, *args, **kwargs)
+        self._log.error(msg, extra=self.supplemental_info_d())
 
     def critical(self, msg, *args, **kwargs):
-        self._log.critical(msg, *args, **kwargs)
+        self._log.critical(msg, extra=self.supplemental_info_d())
 
