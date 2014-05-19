@@ -127,7 +127,6 @@ def main():
     args = parser.parse_args()
     argsd = vars(args)
 
-    _DEBUG_MODE = argsd.pop("debug_mode")
     nreps = argsd.pop("nreps")
     ngens = argsd.pop("ngens")
     random_seed = argsd.pop("random_seed", None)
