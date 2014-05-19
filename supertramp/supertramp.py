@@ -651,6 +651,7 @@ class System(object):
             self.dispersal_source_habitat_types = [self.habitat_types[0]]
 
         # sum of rates of dispersing out of any island == global dispersal rate
+        dispersal_rates = []
         if len(self.islands) <= 1:
             island_dispersal_rate = 0
         else:
@@ -658,9 +659,16 @@ class System(object):
         habitat_dispersal_rates = {}
         for idx, habitat_type in enumerate(self.habitat_types):
             if habitat_type in self.dispersal_source_habitat_types:
-                habitat_dispersal_rates[habitat_type] = island_dispersal_rate / len(self.dispersal_source_habitat_types)
+                disp_rate = island_dispersal_rate / len(self.dispersal_source_habitat_types)
             else:
-                habitat_dispersal_rates[habitat_type] = 0.0
+                disp_rate = 0.0
+            habitat_dispersal_rates[habitat_type] = disp_rate
+            dispersal_rates.append(disp_rate)
+        total_dispersal_rate = sum(dispersal_rates)
+        if abs(total_dispersal_rate - self.global_dispersal_rate) > 1e-8:
+            self.run_logger.critical("Error in dispersal rate distribution: {} != {}: {}".format(
+                total_dispersal_rate, self.global_dispersal_rate, dispersal_rates))
+            sys.exit(1)
         for isl1 in self.islands:
             for isl2 in self.islands:
                 if isl1 is not isl2:
