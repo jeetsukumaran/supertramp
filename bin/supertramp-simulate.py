@@ -132,7 +132,6 @@ def main():
     random_seed = argsd.pop("random_seed", None)
     if random_seed is None:
         random_seed = random.randint(0, sys.maxsize)
-
     configd = dict(argsd)
     configd["run_logger"] = utility.RunLogger(
             name="supertramp",
