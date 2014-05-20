@@ -381,11 +381,13 @@ class SupertrampSimulator(object):
         return parser
 
     def __init__(self, **kwargs):
+        self.reset_system_globals()
         self.configure_simulator(kwargs)
         self.set_model(kwargs)
+        self.sympatric_speciation = False
         if kwargs:
             raise TypeError("Unsupported configuration keywords: {}".format(kwargs))
-        self.sympatric_speciation = False
+        self.bootstrap()
 
     def reset_system_globals(self):
         HabitatType.reset_counter()
@@ -398,9 +400,6 @@ class SupertrampSimulator(object):
         self.phylogeny = None
 
     def set_model(self, model_params_d):
-
-        # Reset/define
-        self.reset_system_globals()
 
         # Landscape: islands
         self.island_labels = model_params_d.pop("island_labels", None)
@@ -461,7 +460,7 @@ class SupertrampSimulator(object):
         if self.run_logger is None:
             self.run_logger = utility.RunLogger(name="supertramp",
                     log_path=self.output_prefix + ".log")
-        self.run_logger.system = None # we do not need generation decoration at this time
+        self.run_logger.system = self
 
         self.debug_mode = configd.pop("debug_mode", False)
         if self.debug_mode:
@@ -517,9 +516,6 @@ class SupertrampSimulator(object):
         return int(k - 1.0)
 
     def bootstrap(self):
-
-        # reset
-        self.reset_system_globals()
 
         # create habitat types
         for ht_label in self.habitat_type_labels:
@@ -946,7 +942,6 @@ def repeat_run_supertramp(
         supertramp_simulator = SupertrampSimulator(
                 name=simulation_name,
                 **configd)
-        supertramp_simulator.bootstrap()
         success = False
         while not success:
             try:
@@ -957,7 +952,6 @@ def repeat_run_supertramp(
                 supertramp_simulator = SupertrampSimulator(
                         name=simulation_name,
                         **configd)
-                supertramp_simulator.bootstrap()
             else:
                 run_logger.info("Run {} of {}: completed to termination condition of {} generations".format(rep+1, nreps, ngens))
                 supertramp_simulator.report()
