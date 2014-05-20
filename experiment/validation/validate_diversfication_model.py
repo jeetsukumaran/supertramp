@@ -25,11 +25,13 @@ class DiversificationSubmodelValidator(object):
                 log_to_file=True,
                 file_logging_level="debug",
                 )
+        self.nreps = nreps
         self.random_seed = random_seed
-        self.delete_simulation_log_file = auto_delete_simulation_log
         if self.random_seed is None:
             random_seed = random.randint(0, sys.maxsize)
         self.test_logger.info("Initializing with random seed: {}".format(random_seed))
+        self.rng = random.Random(self.random_seed)
+        self.delete_simulation_log_file = auto_delete_simulation_log
 
     def run(self):
         self.sim_log_stream = tempfile.NamedTemporaryFile(
@@ -51,12 +53,29 @@ class DiversificationSubmodelValidator(object):
                 log_stream=self.sim_log_stream,
                 file_logging_level="debug",
                 )
-        # s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2):
-        # for s0, e0 in itertools.product(s0e0_values):
-        #     for rep in nreps:
-        #         model_params_d = self.get_model_params_dict()
-        #         model_params_d["diversfication_model_s0"] = s0
-        #         model_params_d["diversfication_model_e0"] = e0
+        s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
+        for s0, e0 in itertools.product(s0e0_values, s0e0_values):
+            for rep in range(self.nreps):
+                self.test_logger.info("Starting replicate {rep} of {nreps} for diversification regime: s0={s0}, e0={e0}".format(
+                    rep=rep+1,
+                    nreps=self.nreps,
+                    s0=s0,
+                    e0=e0))
+
+                model_params_d = self.get_model_params_dict()
+                model_params_d["diversfication_model_s0"] = s0
+                model_params_d["diversfication_model_e0"] = e0
+
+                configd = {}
+                configd.update(model_params_d)
+                configd["run_logger"] = self.sim_logger
+                configd["rng"] = self.rng
+                configd["tree_log"] = tempfile.NamedTemporaryFile(delete=True)
+                self.test_logger.info("Tree log: '{}'".format(configd["tree_log"].name))
+                configd["general_stats_log"] = tempfile.NamedTemporaryFile(delete=True)
+                self.test_logger.info("General stats log: '{}'".format(configd["general_stats_log"].name))
+                configd["general_stats_log"].header_written = False
+
 
     def get_model_params_dict(self):
         model_params_d = {}
