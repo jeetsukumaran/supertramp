@@ -11,6 +11,7 @@ try:
 except ImportError:
     from io import StringIO # Python 3
 from supertramp import utility
+from supertramp import simulate
 
 class DiversificationSubmodelValidator(object):
 
@@ -47,14 +48,14 @@ class DiversificationSubmodelValidator(object):
             ))
         self.sim_logger = utility.RunLogger(
                 name="supertramp-run",
-                log_to_stderr=False,
-                stderr_logging_level=None,
+                log_to_stderr=True,
+                stderr_logging_level="info",
                 log_to_file=True,
                 log_stream=self.sim_log_stream,
                 file_logging_level="debug",
                 )
         s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
-        for s0, e0 in itertools.product(s0e0_values, s0e0_values):
+        for s0e0_idx, (s0, e0) in enumerate(itertools.product(s0e0_values, s0e0_values)):
             for rep in range(self.nreps):
                 self.test_logger.info("Starting replicate {rep} of {nreps} for diversification regime: s0={s0}, e0={e0}".format(
                     rep=rep+1,
@@ -63,8 +64,8 @@ class DiversificationSubmodelValidator(object):
                     e0=e0))
 
                 model_params_d = self.get_model_params_dict()
-                model_params_d["diversfication_model_s0"] = s0
-                model_params_d["diversfication_model_e0"] = e0
+                model_params_d["diversification_model_s0"] = s0
+                model_params_d["diversification_model_e0"] = e0
 
                 configd = {}
                 configd.update(model_params_d)
@@ -76,13 +77,19 @@ class DiversificationSubmodelValidator(object):
                 self.test_logger.info("General stats log: '{}'".format(configd["general_stats_log"].name))
                 configd["general_stats_log"].header_written = False
 
+                supertramp_simulator = simulate.SupertrampSimulator(
+                        name="supertramp", **configd)
+                supertramp_simulator.run(1000)
+
+
+
 
     def get_model_params_dict(self):
         model_params_d = {}
         model_params_d["num_islands"] = 1
         model_params_d["num_habitat_types"] = 1
-        model_params_d["diversfication_model_a"] = -0.5
-        model_params_d["diversfication_model_b"] = 0.5
+        model_params_d["diversification_model_a"] = -0.5
+        model_params_d["diversification_model_b"] = 0.5
         model_params_d["dispersal_model"] = "unconstrained"
         model_params_d["dispersal_rate"] = 0.0
         model_params_d["niche_evolution_probability"] = 0.0
