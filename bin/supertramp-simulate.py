@@ -41,7 +41,11 @@ from supertramp import simulate
 from supertramp import utility
 
 def main():
-    parser = argparse.ArgumentParser(description="{} Biogeographical simulator".format(supertramp.description()))
+    simulation_model_arg_parser = simulate.SupertrampSimulator.simulation_model_arg_parser()
+    parser = argparse.ArgumentParser(
+            parents=[simulation_model_arg_parser],
+            description="{} Biogeographical simulator".format(supertramp.description())
+            )
 
     run_options = parser.add_argument_group("Run Options")
     run_options.add_argument("-z", "--random-seed",
@@ -65,51 +69,7 @@ def main():
             action="store_true",
             default=False,
             help="Run in debugging mode.")
-    landscape_options = parser.add_argument_group("Landscape Options")
-    landscape_options.add_argument("--num-islands",
-            type=int,
-            default=4,
-            help="number of islands (default = %(default)s).")
-    landscape_options.add_argument("--num-habitat-types",
-            type=int,
-            default=3,
-            help="number of habitat types per island (default = %(default)s).")
-    diversification_param_options = parser.add_argument_group("Diversification Model Parameters")
-    diversification_param_options.add_argument("-a", "--diversification-model-a",
-            type=float,
-            default=-0.5,
-            help="'a' parameter of the diversfication model (default: %(default)s).")
-    diversification_param_options.add_argument("-b", "--diversification-model-b",
-            type=float,
-            default=0.5,
-            help="'b' parameter of the diversfication model (default: %(default)s).")
-    diversification_param_options.add_argument("-s", "--diversification-model-s0", "--s0",
-            type=float,
-            default=0.001,
-            help="'s' parameter of the diversfication model (default: %(default)s).")
-    diversification_param_options.add_argument("-e", "--diversification-model-e0", "--e0",
-            type=float,
-            default=0.0001,
-            help="'e' parameter of the diversfication model (default: %(default)s).")
-    taxon_cycle_param_options = parser.add_argument_group("Taxon Cycle (Sub-)Model Parameters")
-    taxon_cycle_param_options.add_argument("--dispersal-model",
-            type=str,
-            default="unconstrained",
-            choices=["constrained", "unconstrained"],
-            help="Dispersal model: constrained or unconstrained by habitat")
-    taxon_cycle_param_options.add_argument("-d", "--dispersal-rate",
-            default=0.01,
-            type=float,
-            help="Dispersal rate (default = %(default)s).")
-    taxon_cycle_param_options.add_argument("-y", "--niche-evolution-probability",
-            default=0.01,
-            type=float,
-            help="Lineage (post-splitting) niche evolution probability (default = %(default)s).")
-    termination_condition_options = parser.add_argument_group("Termination Condition Options")
-    termination_condition_options.add_argument("--ngens",
-            type=int,
-            default=10000,
-            help="Number of generations to run (default = %(default)s).")
+
     output_options = parser.add_argument_group("Output Options")
     output_options.add_argument('-o', '--output-prefix',
         action='store',
@@ -122,6 +82,13 @@ def main():
             default=None,
             type=int,
             help="Frequency that data is sampled from the simulation (default = None [final report only]).")
+
+    termination_condition_options = parser.add_argument_group("Termination Condition Options")
+    termination_condition_options.add_argument("--ngens",
+            type=int,
+            default=10000,
+            help="Number of generations to run (default = %(default)s).")
+
     args = parser.parse_args()
 
     argsd = vars(args)

@@ -38,7 +38,7 @@ except ImportError:
 import sys
 import random
 import collections
-import json
+import argparse
 import supertramp
 from supertramp import utility
 from supertramp.BitVector import BitVector
@@ -334,13 +334,126 @@ class TotalExtinctionException(Exception):
 
 class SupertrampSimulator(object):
 
+    @staticmethod
+    def simulation_model_arg_parser():
+        parser = argparse.ArgumentParser(add_help=False)
+        model_landscape_options = parser.add_argument_group("MODEL: Landscape Configuration")
+        model_landscape_options.add_argument("--num-islands",
+                type=int,
+                default=4,
+                help="number of islands (default = %(default)s).")
+        model_landscape_options.add_argument("--num-habitat-types",
+                type=int,
+                default=3,
+                help="number of habitat types per island (default = %(default)s).")
+        model_diversification_submodel_params = parser.add_argument_group("MODEL: Diversification Submodel Parameters")
+        model_diversification_submodel_params.add_argument("-a", "--diversification-model-a",
+                type=float,
+                default=-0.5,
+                help="'a' parameter of the diversfication model (default: %(default)s).")
+        model_diversification_submodel_params.add_argument("-b", "--diversification-model-b",
+                type=float,
+                default=0.5,
+                help="'b' parameter of the diversfication model (default: %(default)s).")
+        model_diversification_submodel_params.add_argument("-s", "--diversification-model-s0", "--s0",
+                type=float,
+                default=0.001,
+                help="'s' parameter of the diversfication model (default: %(default)s).")
+        model_diversification_submodel_params.add_argument("-e", "--diversification-model-e0", "--e0",
+                type=float,
+                default=0.0001,
+                help="'e' parameter of the diversfication model (default: %(default)s).")
+        model_dispersal_submodel_params = parser.add_argument_group("MODEL: Dispersal Submodel Parameters")
+        model_dispersal_submodel_params.add_argument("--dispersal-model",
+                type=str,
+                default="unconstrained",
+                choices=["constrained", "unconstrained"],
+                help="Dispersal model: constrained or unconstrained by habitat")
+        model_dispersal_submodel_params.add_argument("-d", "--dispersal-rate",
+                default=0.01,
+                type=float,
+                help="Dispersal rate (default = %(default)s).")
+        lineage_evolution_submodel_params = parser.add_argument_group("MODEL: Lineage Evolution Submodel Parameters")
+        lineage_evolution_submodel_params.add_argument("-y", "--niche-evolution-probability",
+                default=0.01,
+                type=float,
+                help="Lineage (post-splitting) niche evolution probability (default = %(default)s).")
+        return parser
+
     def __init__(self, **kwargs):
-        self.configure(kwargs)
+        self.configure_simulator(kwargs)
+        self.set_model(kwargs)
+        if kwargs:
+            raise TypeError("Unsupported configuration keywords: {}".format(kwargs))
         self.sympatric_speciation = False
 
-    def configure(self, configd):
+    def reset_system_globals(self):
+        HabitatType.reset_counter()
+        Habitat.reset_counter()
+        Island.reset_counter()
+        Lineage.reset_counter()
+        self.current_gen = 0
+        self.habitat_types = []
+        self.islands = []
+        self.phylogeny = None
 
+    def set_model(self, model_params_d):
+
+        # Reset/define
         self.reset_system_globals()
+
+        # Landscape: islands
+        self.island_labels = model_params_d.pop("island_labels", None)
+        if self.island_labels is None:
+            self.island_labels = []
+            num_islands = model_params_d.pop("num_islands", 4)
+            for i in range(num_islands):
+                label = "I{}".format(i+1)
+                self.island_labels.append(label)
+        else:
+            if num_islands in model_params_d and num_islands != len(self.island_labels):
+                raise ValueError("Number of islands requested ({}) does not match number of islands specified ({})".format(
+                    model_params_d["num_islands"], len(self.island_labels)))
+        self.run_logger.info("Configuring {} islands: {}".format(
+            len(self.island_labels), self.island_labels))
+
+        # Landscape: habitats
+        self.habitat_type_labels = model_params_d.pop("habitat_type_labels", None)
+        if self.habitat_type_labels is None:
+            num_habitat_types = model_params_d.pop("num_habitat_types", 3)
+            self.habitat_type_labels = []
+            for i in range(num_habitat_types):
+                label = "H{}".format(i+1)
+                self.habitat_type_labels.append(label)
+        else:
+            if num_habitat_types in model_params_d and num_habitat_types != len(self.habitat_type_labels):
+                raise ValueError("Number of habitat_types requested ({}) does not match number of habitat_types specified ({})".format(
+                    model_params_d["num_habitat_types"], len(self.habitat_type_labels)))
+        self.run_logger.info("Configuring {} habitat types per island: {}".format(
+            len(self.habitat_type_labels), self.habitat_type_labels))
+
+        # Dispersal submodel
+        self.dispersal_model = model_params_d.pop("dispersal_model", "unconstrained")
+        self.run_logger.info("Dispersal model category: '{}'".format(self.dispersal_model))
+        self.global_dispersal_rate = model_params_d.pop("dispersal_rate", 0.01)
+        self.run_logger.info("Dispersal rate, d: {}".format(self.global_dispersal_rate))
+
+        # Diversification submodel
+        self.diversification_model_a = model_params_d.pop("diversification_model_a", -0.5)
+        self.run_logger.info("Diversification model, a: {}".format(self.diversification_model_a))
+        self.diversification_model_b = model_params_d.pop("diversification_model_b", 0.5)
+        self.run_logger.info("Diversification model, b: {}".format(self.diversification_model_b))
+        self.diversification_model_s0 = model_params_d.pop("diversification_model_s0", 0.1)
+        self.run_logger.info("Diversification model, s0: {}".format(self.diversification_model_s0))
+        self.diversification_model_e0 = model_params_d.pop("diversification_model_e0", 0.001)
+        self.run_logger.info("Diversification model, e0: {}".format(self.diversification_model_e0))
+        self.run_logger.info("Projected habitat species richness (s0/e0): {}".format(self.diversification_model_s0/self.diversification_model_e0))
+
+        # Nice Shift/Evolution submodel
+        self.global_lineage_niche_evolution_probability = model_params_d.pop("niche_evolution_probability", 0.01)
+        self.run_logger.info("Niche evolution probability: {}".format(self.global_lineage_niche_evolution_probability))
+
+    def configure_simulator(self, configd):
 
         self.output_prefix = configd.pop("output_prefix", "supertramp")
 
@@ -348,7 +461,7 @@ class SupertrampSimulator(object):
         if self.run_logger is None:
             self.run_logger = utility.RunLogger(name="supertramp",
                     log_path=self.output_prefix + ".log")
-        self.run_logger.system = self
+        self.run_logger.system = None # we do not need generation decoration at this time
 
         self.debug_mode = configd.pop("debug_mode", False)
         if self.debug_mode:
@@ -382,68 +495,8 @@ class SupertrampSimulator(object):
                 raise TypeError("Cannot specify both 'rng' and 'random_seed'")
             self.run_logger.info("Using existing random number generator")
 
-        self.island_labels = configd.pop("island_labels", None)
-        if self.island_labels is None:
-            self.island_labels = []
-            num_islands = configd.pop("num_islands", 4)
-            for i in range(num_islands):
-                label = "I{}".format(i+1)
-                self.island_labels.append(label)
-        else:
-            if num_islands in configd and num_islands != len(self.island_labels):
-                raise ValueError("Number of islands requested ({}) does not match number of islands specified ({})".format(
-                    configd["num_islands"], len(self.island_labels)))
-        self.run_logger.info("Configuring {} islands: {}".format(
-            len(self.island_labels), self.island_labels))
-
-        self.habitat_type_labels = configd.pop("habitat_type_labels", None)
-        if self.habitat_type_labels is None:
-            num_habitat_types = configd.pop("num_habitat_types", 3)
-            self.habitat_type_labels = []
-            for i in range(num_habitat_types):
-                label = "H{}".format(i+1)
-                self.habitat_type_labels.append(label)
-        else:
-            if num_habitat_types in configd and num_habitat_types != len(self.habitat_type_labels):
-                raise ValueError("Number of habitat_types requested ({}) does not match number of habitat_types specified ({})".format(
-                    configd["num_habitat_types"], len(self.habitat_type_labels)))
-        self.run_logger.info("Configuring {} habitat types per island: {}".format(
-            len(self.habitat_type_labels), self.habitat_type_labels))
-
-
-        self.dispersal_model = configd.pop("dispersal_model", "unconstrained")
-        self.run_logger.info("Dispersal model category: '{}'".format(self.dispersal_model))
-        self.global_dispersal_rate = configd.pop("dispersal_rate", 0.01)
-        self.run_logger.info("Dispersal rate, d: {}".format(self.global_dispersal_rate))
-
-        self.diversification_model_a = configd.pop("diversification_model_a", -0.5)
-        self.run_logger.info("Diversification model, a: {}".format(self.diversification_model_a))
-        self.diversification_model_b = configd.pop("diversification_model_b", 0.5)
-        self.run_logger.info("Diversification model, b: {}".format(self.diversification_model_b))
-        self.diversification_model_s0 = configd.pop("diversification_model_s0", 0.1)
-        self.run_logger.info("Diversification model, s0: {}".format(self.diversification_model_s0))
-        self.diversification_model_e0 = configd.pop("diversification_model_e0", 0.001)
-        self.run_logger.info("Diversification model, e0: {}".format(self.diversification_model_e0))
-        self.run_logger.info("Projected habitat species richness (s0/e0): {}".format(self.diversification_model_s0/self.diversification_model_e0))
-
-        self.global_lineage_niche_evolution_probability = configd.pop("niche_evolution_probability", 0.01)
-        self.run_logger.info("Niche evolution probability: {}".format(self.global_lineage_niche_evolution_probability))
-
         self.log_frequency = configd.pop("log_frequency", 1000)
         self.report_frequency = configd.pop("report_frequency", None)
-
-        if configd:
-            raise TypeError("Unsupported configuration keywords: {}".format(configd))
-
-    def reset_system_globals(self):
-        HabitatType.reset_counter()
-        Habitat.reset_counter()
-        Island.reset_counter()
-        Lineage.reset_counter()
-        self.current_gen = 0
-        self.habitat_types = []
-        self.islands = []
-        self.phylogeny = None
 
     def poisson_rv(rate):
         """
@@ -494,7 +547,7 @@ class SupertrampSimulator(object):
         dispersal_rates = []
         if len(self.islands) <= 1:
             if self.global_dispersal_rate > 0:
-                self.run_logger.info("Only {} island: forcing dispersal rate to 0.0".format(len(self.islands0)))
+                self.run_logger.info("Only {} island: forcing dispersal rate to 0.0".format(len(self.islands)))
             island_dispersal_rate = 0
         else:
             island_dispersal_rate = float(self.global_dispersal_rate) / ((len(self.islands) * (len(self.islands) - 1)))
@@ -527,6 +580,9 @@ class SupertrampSimulator(object):
 
         # seed lineage
         self.islands[0].habitat_list[0].add_lineage(self.phylogeny.seed_node)
+
+        # begin logging generations
+        self.run_logger.system = self
 
     @property
     def num_islands(self):
