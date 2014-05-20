@@ -34,6 +34,7 @@
 import os
 import logging
 import inspect
+import tempfile
 
 _LOGGING_LEVEL_ENVAR = "SUPERTRAMP_LOGGING_LEVEL"
 _LOGGING_FORMAT_ENVAR = "SUPERTRAMP_LOGGING_FORMAT"
@@ -169,4 +170,5 @@ class RunLogger(object):
 
     def critical(self, msg):
         self._log.critical(msg, extra=self.supplemental_info_d())
+
 

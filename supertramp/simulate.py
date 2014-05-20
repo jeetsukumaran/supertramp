@@ -924,10 +924,10 @@ def repeat_run_supertramp(
         log_to_file = True
     configd["run_logger"] = utility.RunLogger(
             name="supertramp",
-            log_path=output_prefix + ".log",
             log_to_stderr=log_to_stderr,
             stderr_logging_level=stderr_logging_level,
             log_to_file=log_to_file,
+            log_path=output_prefix + ".log",
             file_logging_level=file_logging_level,
             )
     run_logger = configd["run_logger"]
