@@ -590,7 +590,7 @@ class SupertrampSimulator(object):
 
     def run(self, ngens):
         self.run_logger.info(
-            "Starting {ngens}-generation run: from generation {start} to generation {stop}".format(
+            "Starting run: {ngens} generations, from generation {start} to generation {stop}".format(
             start=self.current_gen+1,
             ngens=ngens,
             stop=self.current_gen + ngens,
@@ -931,10 +931,10 @@ def repeat_run_supertramp(
             file_logging_level=file_logging_level,
             )
     run_logger = configd["run_logger"]
-    run_logger.info("Starting: {}".format(supertramp.description()))
+    run_logger.info("||SUPERTRAMP-META|| Starting: {}".format(supertramp.description()))
     if random_seed is None:
         random_seed = random.randint(0, sys.maxsize)
-    run_logger.info("-- Initializing with random seed: {}".format(random_seed))
+    run_logger.info("||SUPERTRAMP-META|| Initializing with random seed: {}".format(random_seed))
     configd["rng"] = random.Random(random_seed)
     configd["tree_log"] = open(output_prefix + ".trees",
             "w")
@@ -946,7 +946,7 @@ def repeat_run_supertramp(
     while rep < nreps:
         simulation_name="Run{}".format((rep+1))
         run_output_prefix = "{}.R{:04d}".format(output_prefix, rep+1)
-        run_logger.info("-- Run {} of {}: starting".format(rep+1, nreps))
+        run_logger.info("||SUPERTRAMP-META|| Run {} of {}: starting".format(rep+1, nreps))
         while True:
             supertramp_simulator = SupertrampSimulator(
                     name=simulation_name,
@@ -954,10 +954,10 @@ def repeat_run_supertramp(
             try:
                 success = supertramp_simulator.run(ngens)
             except TotalExtinctionException:
-                run_logger.info("-- Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, nreps, supertramp_simulator.current_gen))
-                run_logger.info("-- Run {} of {}: restarting".format(rep+1, nreps))
+                run_logger.info("||SUPERTRAMP-META|| Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, nreps, supertramp_simulator.current_gen))
+                run_logger.info("||SUPERTRAMP-META|| Run {} of {}: restarting".format(rep+1, nreps))
             else:
-                run_logger.info("-- Run {} of {}: completed to termination condition of {} generations".format(rep+1, nreps, ngens))
+                run_logger.info("||SUPERTRAMP-META|| Run {} of {}: completed to termination condition of {} generations".format(rep+1, nreps, ngens))
                 supertramp_simulator.report()
                 break
         rep += 1
