@@ -155,18 +155,18 @@ class RunLogger(object):
         else:
             return None
 
-    def debug(self, msg, *args, **kwargs):
+    def debug(self, msg):
         self._log.debug(msg, extra=self.supplemental_info_d())
 
-    def info(self, msg, *args, **kwargs):
+    def info(self, msg):
         self._log.info(msg, extra=self.supplemental_info_d())
 
-    def warning(self, msg, *args, **kwargs):
+    def warning(self, msg):
         self._log.warning(msg, extra=self.supplemental_info_d())
 
-    def error(self, msg, *args, **kwargs):
+    def error(self, msg):
         self._log.error(msg, extra=self.supplemental_info_d())
 
-    def critical(self, msg, *args, **kwargs):
+    def critical(self, msg):
         self._log.critical(msg, extra=self.supplemental_info_d())
 

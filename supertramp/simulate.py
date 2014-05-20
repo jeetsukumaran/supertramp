@@ -462,10 +462,6 @@ class SupertrampSimulator(object):
                     log_path=self.output_prefix + ".log")
         self.run_logger.system = self
 
-        self.debug_mode = configd.pop("debug_mode", False)
-        if self.debug_mode:
-            self.run_logger.info("Running in DEBUG mode")
-
         self.name = configd.pop("name", None)
         if self.name is None:
             self.name = str(id(self))
@@ -493,6 +489,10 @@ class SupertrampSimulator(object):
             if "random_seed" in configd:
                 raise TypeError("Cannot specify both 'rng' and 'random_seed'")
             self.run_logger.info("Using existing random number generator")
+
+        self.debug_mode = configd.pop("debug_mode", False)
+        if self.debug_mode:
+            self.run_logger.info("Running in DEBUG mode")
 
         self.log_frequency = configd.pop("log_frequency", 1000)
         self.report_frequency = configd.pop("report_frequency", None)
@@ -588,13 +588,21 @@ class SupertrampSimulator(object):
     def num_habitat_types(self):
         return len(self.habitat_types)
 
-    def run(self, ngens, repeat_on_total_extinction=True):
+    def run(self, ngens):
+        self.run_logger.info(
+            "Starting {ngens}-generation run: from generation {start} to generation {stop}".format(
+            start=self.current_gen+1,
+            ngens=ngens,
+            stop=self.current_gen + ngens,
+            ))
+        self.run_logger.system = self
         for x in range(ngens):
             if ( (self.report_frequency is not None)
                 and ( (self.current_gen % self.report_frequency) == 0 )
                 ):
                 self.report()
             self.execute_life_cycle()
+        self.run_logger.system = None
         return True
 
     def execute_life_cycle(self):
