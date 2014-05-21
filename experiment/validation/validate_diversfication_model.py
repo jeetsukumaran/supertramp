@@ -17,6 +17,8 @@ class DiversificationSubmodelValidator(object):
 
     def __init__(self,
             nreps=1,
+            ngens=1e6,
+            sample_frequency=1e3,
             random_seed=None,
             auto_delete_simulation_log=True):
         self.test_logger = utility.RunLogger(
@@ -30,9 +32,14 @@ class DiversificationSubmodelValidator(object):
         self.random_seed = random_seed
         if self.random_seed is None:
             random_seed = random.randint(0, sys.maxsize)
-        self.test_logger.info("Initializing with random seed: {}".format(random_seed))
+        self.test_logger.info("||SUPERTRAMP-TEST|| Initializing with random seed: {}".format(random_seed))
         self.rng = random.Random(self.random_seed)
         self.delete_simulation_log_file = auto_delete_simulation_log
+        self.ngens = int(ngens)
+        self.sample_frequency = int(sample_frequency)
+
+    def analyze(self, simulator):
+        pass
 
     def run(self):
         self.sim_log_stream = tempfile.NamedTemporaryFile(
@@ -42,7 +49,7 @@ class DiversificationSubmodelValidator(object):
                 suffix=".log",
                 delete=self.delete_simulation_log_file,
                 )
-        self.test_logger.info("Simulation log will be saved to: '{}' ({} on successful exit)".format(
+        self.test_logger.info("||SUPERTRAMP-TEST|| Simulation log will be saved to: '{}' ({} on successful exit)".format(
             self.sim_log_stream.name,
             "auto-deleted" if self.delete_simulation_log_file else "not deleted",
             ))
@@ -56,33 +63,41 @@ class DiversificationSubmodelValidator(object):
                 )
         s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
         for s0e0_idx, (s0, e0) in enumerate(itertools.product(s0e0_values, s0e0_values)):
-            for rep in range(self.nreps):
-                self.test_logger.info("Starting replicate {rep} of {nreps} for diversification regime: s0={s0}, e0={e0}".format(
-                    rep=rep+1,
-                    nreps=self.nreps,
-                    s0=s0,
-                    e0=e0))
-
-                model_params_d = self.get_model_params_dict()
-                model_params_d["diversification_model_s0"] = s0
-                model_params_d["diversification_model_e0"] = e0
-
-                configd = {}
-                configd.update(model_params_d)
-                configd["run_logger"] = self.sim_logger
-                configd["rng"] = self.rng
-                configd["tree_log"] = tempfile.NamedTemporaryFile(delete=True)
-                self.test_logger.info("Tree log: '{}'".format(configd["tree_log"].name))
-                configd["general_stats_log"] = tempfile.NamedTemporaryFile(delete=True)
-                self.test_logger.info("General stats log: '{}'".format(configd["general_stats_log"].name))
-                configd["general_stats_log"].header_written = False
-
-                supertramp_simulator = simulate.SupertrampSimulator(
-                        name="supertramp", **configd)
-                supertramp_simulator.run(1000)
-
-
-
+            total_reps = 0
+            while total_reps < self.nreps:
+                while True:
+                    try:
+                        self.test_logger.info("||SUPERTRAMP-TEST|| Starting replicate {rep} of {nreps} for diversification regime: s0={s0}, e0={e0}".format(
+                            rep=total_reps+1,
+                            nreps=self.nreps,
+                            s0=s0,
+                            e0=e0))
+                        model_params_d = self.get_model_params_dict()
+                        model_params_d["diversification_model_s0"] = s0
+                        model_params_d["diversification_model_e0"] = e0
+                        configd = {}
+                        configd.update(model_params_d)
+                        configd["run_logger"] = self.sim_logger
+                        configd["rng"] = self.rng
+                        configd["tree_log"] = tempfile.NamedTemporaryFile(mode="w", delete=True)
+                        self.test_logger.info("||SUPERTRAMP-TEST|| Tree log: '{}'".format(configd["tree_log"].name))
+                        configd["general_stats_log"] = tempfile.NamedTemporaryFile(mode="w", delete=True)
+                        self.test_logger.info("||SUPERTRAMP-TEST|| General stats log: '{}'".format(configd["general_stats_log"].name))
+                        configd["general_stats_log"].header_written = False
+                        configd["log_frequency"] = 0
+                        supertramp_simulator = simulate.SupertrampSimulator(
+                                name="supertramp", **configd)
+                        while supertramp_simulator.current_gen < self.ngens:
+                            supertramp_simulator.run(self.sample_frequency)
+                            self.analyze(supertramp_simulator)
+                    except simulate.TotalExtinctionException:
+                        self.test_logger.info("||SUPERTRAMP-TEST|| Replicate {} of {}: [t={}] total extinction of all lineages before termination condition".format(total_reps, self.nreps, supertramp_simulator.current_gen))
+                        self.test_logger.info("||SUPERTRAMP-TEST|| Replicate {} of {}: restarting".format(total_reps, self.nreps))
+                    else:
+                        self.test_logger.info("||SUPERTRAMP-TEST|| Replicate {} of {}: completed to termination condition of {} generations".format(total_reps, self.nreps, self.ngens))
+                        supertramp_simulator.report()
+                        break
+                total_reps += 1
 
     def get_model_params_dict(self):
         model_params_d = {}
@@ -103,7 +118,15 @@ def main():
     parser.add_argument("-n", "--nreps",
             type=int,
             default=10,
-            help="number of replicates (default = %(default)s).")
+            help="Number of replicates (default = %(default)s).")
+    parser.add_argument("-g", "--ngens",
+            type=int,
+            default=10000,
+            help="Number of generations to run in each replicate (default = %(default)s).")
+    parser.add_argument("-s", "--sample-frequency",
+            type=int,
+            default=100,
+            help="Frequency (number of generations) of samples to be taken during each replicate run (default = %(default)s).")
     parser.add_argument("--log-frequency",
             default=100,
             type=int,
@@ -122,7 +145,10 @@ def main():
 
     validator = DiversificationSubmodelValidator(
             nreps=args.nreps,
-            random_seed=args.random_seed)
+            ngens=args.ngens,
+            sample_frequency=args.sample_frequency,
+            random_seed=args.random_seed,
+            auto_delete_simulation_log=True)
     validator.run()
 
 

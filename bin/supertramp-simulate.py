@@ -84,7 +84,7 @@ def main():
             help="Frequency that data is sampled from the simulation (default = None [final report only]).")
 
     termination_condition_options = parser.add_argument_group("Termination Condition Options")
-    termination_condition_options.add_argument("--ngens",
+    termination_condition_options.add_argument("-g", "--ngens",
             type=int,
             default=10000,
             help="Number of generations to run (default = %(default)s).")

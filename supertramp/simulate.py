@@ -590,7 +590,7 @@ class SupertrampSimulator(object):
 
     def run(self, ngens):
         self.run_logger.info(
-            "Starting run: {ngens} generations, from generation {start} to generation {stop}".format(
+            "Running from generation {start} to generation {stop} ({ngens} generations)".format(
             start=self.current_gen+1,
             ngens=ngens,
             stop=self.current_gen + ngens,
@@ -608,7 +608,7 @@ class SupertrampSimulator(object):
     def execute_life_cycle(self):
         self.current_gen += 1
         self.phylogeny.add_age_to_tips(1)
-        if self.current_gen % self.log_frequency == 0:
+        if self.log_frequency > 0 and self.current_gen % self.log_frequency == 0:
             self.run_logger.info("Executing life-cycle {}".format(self.current_gen))
         for island in self.islands:
             island.run_dispersals()
