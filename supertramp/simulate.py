@@ -689,7 +689,7 @@ class SupertrampSimulator(object):
                     if self.rng.uniform(0, 1) <= splitting_rate:
                         lineage_splitting_habitat_localities[lineage].add(habitat)
         if not lineage_habitats:
-            self.total_extinction_exception("Birth cycle: no lineages found in any habitat on any island")
+            self.total_extinction_exception("Birth cycle (census): no lineages found in any habitat on any island")
         for lineage in lineage_splitting_habitat_localities:
             assert not lineage.extinct
             splitting_habitats = lineage_splitting_habitat_localities[lineage]
@@ -802,7 +802,7 @@ class SupertrampSimulator(object):
                     habitat.remove_lineage(lineage)
                     lineage_counts.subtract([lineage])
         if not lineage_counts:
-            self.total_extinction_exception("Death cycle: no lineages found in any habitat on any island")
+            self.total_extinction_exception("Death cycle (census): no lineages found in any habitat on any island")
         for lineage in lineage_counts:
             count = lineage_counts[lineage]
             if count == 0:
@@ -811,12 +811,12 @@ class SupertrampSimulator(object):
                     ))
                 lineage.extinct = True
                 if lineage is self.phylogeny.seed_node:
-                    self.total_extinction_exception("Death cycle: seed node has been extirpated from all habitats on all islands")
+                    self.total_extinction_exception("Death cycle (pruning): seed node has been extirpated from all habitats on all islands")
                 elif not self.track_extinct_lineages:
                     self.phylogeny.prune_subtree(node=lineage,
                             update_splits=False, delete_outdegree_one=True)
                     if self.phylogeny.seed_node.num_child_nodes() == 0 and self.phylogeny.seed_node.extinct:
-                        self.total_extinction_exception("Death cycle: no extant lineages on tree")
+                        self.total_extinction_exception("Death cycle (post-pruning): no extant lineages on tree")
             elif self.debug_mode:
                 ## sanity checking ...
                 found = True
