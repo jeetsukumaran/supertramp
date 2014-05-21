@@ -126,12 +126,12 @@ class DiversificationSubmodelValidator(object):
                 log_to_file=True,
                 log_stream=self.sim_log_stream,
                 file_logging_level="debug")
-        # s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
-        # s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
-        # for s0e0_idx, (s0, e0) in enumerate(itertools.product(s0e0_values, s0e0_values)):
-        s0e0_values = (
-                (0.01, 0.001),
-                )
+        s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
+        s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
+        for s0e0_idx, (s0, e0) in enumerate(itertools.product(s0e0_values, s0e0_values)):
+        # s0e0_values = (
+        #         (0.01, 0.001),
+        #         )
         for s0e0_idx, (s0, e0) in enumerate(s0e0_values):
             output_file_tag = "_s0={}_e0={}_".format(s0, e0)
             output_files_d = {}
