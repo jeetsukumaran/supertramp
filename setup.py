@@ -15,6 +15,6 @@ setup(
     url="http://pypi.python.org/pypi/supertramp/",
     license="LICENSE.txt",
     description="A Project",
-    long_description=open("README.txt").read(),
+    long_description=open("README.rst").read(),
     # install_requires=[ ],
 )

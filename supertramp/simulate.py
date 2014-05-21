@@ -427,7 +427,6 @@ class SupertrampSimulator(object):
             self.single_island_mode = True
         else:
             self.single_island_mode = False
-        assert self.single_island_mode
 
     def set_model(self, model_params_d):
 
