@@ -394,6 +394,12 @@ class SupertrampSimulator(object):
         self.islands = []
         self.phylogeny = None
 
+        # system globals: metrics
+        self.num_births = 0
+        self.num_extirpations = 0
+        self.num_extinctions = 0
+        self.num_niche_shifts = 0
+
         # run configuration
         self.output_prefix = None
         self.run_logger = None
@@ -409,12 +415,19 @@ class SupertrampSimulator(object):
         # configure
         self.configure_simulator(kwargs)
         self.set_model(kwargs)
-        self.sympatric_speciation = False
         if kwargs:
             raise TypeError("Unsupported configuration keywords: {}".format(kwargs))
 
         # setup
         self.bootstrap()
+
+        # set specation modes
+        self.sympatric_speciation = False
+        if len(self.islands) == 1:
+            self.single_island_mode = True
+        else:
+            self.single_island_mode = False
+        assert self.single_island_mode
 
     def set_model(self, model_params_d):
 
@@ -621,10 +634,6 @@ class SupertrampSimulator(object):
             ))
         self.run_logger.system = self
         for x in range(ngens):
-            if ( (self.report_frequency is not None)
-                and ( (self.current_gen % self.report_frequency) == 0 )
-                ):
-                self.report()
             self.execute_life_cycle()
         self.run_logger.system = None
         return True
@@ -636,13 +645,15 @@ class SupertrampSimulator(object):
     def execute_life_cycle(self):
         self.current_gen += 1
         self.phylogeny.add_age_to_extant_tips(1)
-        if self.log_frequency > 0 and self.current_gen % self.log_frequency == 0:
+        if self.log_frequency is not None and self.log_frequency > 0 and self.current_gen % self.log_frequency == 0:
             self.run_logger.info("Executing life-cycle {}".format(self.current_gen))
         for island in self.islands:
             island.run_dispersals()
         for island in self.islands:
             island.process_migrants()
         self.run_diversification()
+        if self.report_frequency is not None and self.report_frequency > 0 and self.current_gen % self.report_frequency == 0:
+            self.report()
 
     def run_diversification(self):
         if self.rng.uniform(0, 1) <= 0.5:
@@ -693,7 +704,7 @@ class SupertrampSimulator(object):
         for lineage in lineage_splitting_habitat_localities:
             assert lineage.is_extant
             splitting_habitats = lineage_splitting_habitat_localities[lineage]
-            if not self.sympatric_speciation:
+            if not self.sympatric_speciation and not self.single_island_mode:
                 if len(lineage_habitats[lineage]) == 1:
                     # lineage occurs only in a habitat of only one island;
                     # since sympatric speciation is disallowed: skipped
@@ -702,16 +713,18 @@ class SupertrampSimulator(object):
                     # lineage in splitting in every island in which it occurs;
                     # since sympatric speciation is disallowed: drop one
                     splitting_habitats.remove(self.rng.choice(list(splitting_habitats)))
+            nsplits = len(splitting_habitats)
             children = lineage.diversify(
                     lineage_indexer=self.lineage_indexer,
                     finalize_distribution_label=True,
-                    nsplits=len(splitting_habitats))
+                    nsplits=nsplits)
             self.run_logger.debug("{splitting_lineage} speciating in {num_islands} islands: {islands}".format(
                 splitting_lineage=lineage.logging_label,
                 num_islands=len(splitting_habitats),
                 islands=",".join([habitat.island.label for habitat in splitting_habitats]),
                 ))
             assert len(children) == len(splitting_habitats) + 1
+            self.num_births += nsplits
             if self.debug_mode:
                 try:
                     self.phylogeny._debug_check_tree()
@@ -740,8 +753,9 @@ class SupertrampSimulator(object):
                         daughter_lineage1_habitat_type=c1.habitat_type.label,
                         island=habitat.island.label,
                         ))
-                    if self.sympatric_speciation:
+                    if self.sympatric_speciation or self.single_island_mode:
                         habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+                        c0_placed = True
                         self.run_logger.debug("{splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') continuing as {daughter_lineage0} in island {island}".format(
                             splitting_lineage=lineage.logging_label,
                             splitting_lineage_habitat_type=lineage.habitat_type.label,
@@ -799,6 +813,7 @@ class SupertrampSimulator(object):
                         lineage=lineage.logging_label,
                         island=habitat.island.label,
                         ))
+                    self.num_extirpations += 1
                     habitat.remove_lineage(lineage)
                     lineage_counts.subtract([lineage])
         if not lineage_counts:
@@ -809,6 +824,7 @@ class SupertrampSimulator(object):
                 self.run_logger.debug("{lineage} extirpated from all islands and is now globally extinct".format(
                     lineage=lineage.logging_label,
                     ))
+                self.num_extinctions += 1
                 lineage.is_extant = False
                 if lineage is self.phylogeny.seed_node:
                     self.total_extinction_exception("Death cycle (pruning): seed node has been extirpated from all habitats on all islands")
@@ -916,6 +932,17 @@ class SupertrampSimulator(object):
     def report(self):
         self.report_trees()
         self.report_general_stats()
+
+    def count_extant_lineages(self):
+        c = 0
+        for nd in self.phylogeny.leaf_node_iter():
+            if nd.is_extant:
+                c += 1
+        return c
+
+    def _get_num_extant_lineages(self):
+        return self.count_extant_lineages()
+    num_extant_lineages = property(_get_num_extant_lineages)
 
 def repeat_run_supertramp(
         model_params_d,
