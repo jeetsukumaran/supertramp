@@ -81,17 +81,26 @@ def weighted_index_choice(weights, rng=None):
         if rnd < 0:
             return i
 
+class IndexGenerator(object):
+
+    def __init__(self, start=0):
+        self.start = start
+        self.index = start
+
+    def __next__(self):
+        c = self.index
+        self.index += 1
+        return c
+
+    def reset(self, start=None):
+        if start is None:
+            start = self.start
+        self.index = start
+
 class HabitatType(object):
 
-    counter = 0
-
-    def reset_counter(cls):
-        cls.counter = 0
-    reset_counter = classmethod(reset_counter)
-
-    def __init__(self, label):
-        self.index = self.__class__.counter
-        self.__class__.counter += 1
+    def __init__(self, index, label):
+        self.index =  index
         self.label = label
 
     def __str__(self):
@@ -99,17 +108,11 @@ class HabitatType(object):
 
 class Habitat(object):
 
-    counter = 0
-
-    def reset_counter(cls):
-        cls.counter = 0
-    reset_counter = classmethod(reset_counter)
-
     def __init__(self,
+            index,
             habitat_type,
             island):
-        self.index = self.__class__.counter
-        self.__class__.counter += 1
+        self.index = index
         self.habitat_type = habitat_type
         self.island = island
         self.lineages = set()
@@ -136,19 +139,14 @@ class Habitat(object):
 
 class Island(object):
 
-    counter = 0
-
-    def reset_counter(cls):
-        cls.counter = 0
-    reset_counter = classmethod(reset_counter)
-
     def __init__(self,
+            index,
             rng,
             label,
             habitat_types,
+            habitat_indexer,
             run_logger=None):
-        self.index = self.__class__.counter
-        self.__class__.counter += 1
+        self.index = index
         self.rng = rng
         self.label = label
         self.habitat_types = habitat_types
@@ -159,6 +157,7 @@ class Island(object):
         # construct habitats
         for ht_idx, ht in enumerate(self.habitat_types):
             h = Habitat(
+                    index=next(habitat_indexer),
                     habitat_type=ht,
                     island=self)
             self.habitat_list.append(h)
@@ -208,17 +207,11 @@ class Island(object):
 
 class Lineage(dendropy.Node):
 
-    counter = 0
-
-    def reset_counter(cls):
-        cls.counter = 0
-    reset_counter = classmethod(reset_counter)
-
     def __init__(self,
+            index,
             habitat_type=None,
             system=None):
-        self.index = self.__class__.counter
-        self.__class__.counter += 1
+        self.index = index
         super(Lineage, self).__init__()
         self.habitat_type = habitat_type
         self.system = system
@@ -285,7 +278,10 @@ class Lineage(dendropy.Node):
         else:
             self.edge.length += ngens
 
-    def diversify(self, finalize_distribution_label=True, nsplits=1):
+    def diversify(self,
+            lineage_indexer,
+            finalize_distribution_label=True,
+            nsplits=1):
         """
         Spawns two child lineages with self as parent.
         Returns tuple consisting of these two lineages.
@@ -296,7 +292,10 @@ class Lineage(dendropy.Node):
             self.final_distribution_label = self.distribution_label
         children = []
         for i in range(nsplits+1):
-            c1 = Lineage(habitat_type=self.habitat_type, system=self.system)
+            c1 = Lineage(
+                    index=next(lineage_indexer),
+                    habitat_type=self.habitat_type,
+                    system=self.system)
             children.append(c1)
             self.add_child(c1)
             assert c1.parent_node is self
@@ -381,23 +380,24 @@ class SupertrampSimulator(object):
         return parser
 
     def __init__(self, **kwargs):
-        self.reset_system_globals()
+
+        # create state variables
+        self.habitat_indexer = IndexGenerator(0)
+        self.lineage_indexer = IndexGenerator(0)
+        self.current_gen = 0
+        self.habitat_types = []
+        self.islands = []
+        self.phylogeny = None
+
+        # configure
         self.configure_simulator(kwargs)
         self.set_model(kwargs)
         self.sympatric_speciation = False
         if kwargs:
             raise TypeError("Unsupported configuration keywords: {}".format(kwargs))
-        self.bootstrap()
 
-    def reset_system_globals(self):
-        HabitatType.reset_counter()
-        Habitat.reset_counter()
-        Island.reset_counter()
-        Lineage.reset_counter()
-        self.current_gen = 0
-        self.habitat_types = []
-        self.islands = []
-        self.phylogeny = None
+        # setup
+        self.bootstrap()
 
     def set_model(self, model_params_d):
 
@@ -518,17 +518,19 @@ class SupertrampSimulator(object):
     def bootstrap(self):
 
         # create habitat types
-        for ht_label in self.habitat_type_labels:
-            h = HabitatType(label=ht_label)
+        for ht_idx, ht_label in enumerate(self.habitat_type_labels):
+            h = HabitatType(index=ht_idx, label=ht_label)
             self.habitat_types.append(h)
         self.all_habitat_types_bitmask = (1 << len(self.habitat_types)) - 1
 
         # create islands
-        for island_label in self.island_labels:
+        for island_idx, island_label in enumerate(self.island_labels):
             island = Island(
+                    index=island_idx,
                     rng=self.rng,
                     label=island_label,
                     habitat_types=self.habitat_types,
+                    habitat_indexer=self.habitat_indexer,
                     run_logger=self.run_logger)
             self.islands.append(island)
         self.all_islands_bitmask = (1 << len(self.islands)) - 1
@@ -571,7 +573,7 @@ class SupertrampSimulator(object):
 
         # initialize lineages
         self.seed_habitat = self.dispersal_source_habitat_types[0]
-        seed_node = Lineage(habitat_type=self.seed_habitat, system=self)
+        seed_node = Lineage(index=0, habitat_type=self.seed_habitat, system=self)
         self.phylogeny = Phylogeny(seed_node=seed_node)
 
         # seed lineage
@@ -670,7 +672,9 @@ class SupertrampSimulator(object):
                     # lineage in splitting in every island in which it occurs;
                     # since sympatric speciation is disallowed: drop one
                     splitting_habitats.remove(self.rng.choice(splitting_habitats))
-            children = lineage.diversify(finalize_distribution_label=True,
+            children = lineage.diversify(
+                    lineage_indexer=self.lineage_indexer,
+                    finalize_distribution_label=True,
                     nsplits=len(splitting_habitats))
             self.run_logger.debug("{splitting_lineage} speciating in {num_islands} islands: {islands}".format(
                 splitting_lineage=lineage.logging_label,
