@@ -220,7 +220,7 @@ class Lineage(dendropy.Node):
         self.habitats = None
         self.final_distribution_label = None
         self.edge.length = 0
-        self.extinct = False
+        self.is_extant = True
         if self.system is not None:
             self.bootstrap()
 
@@ -275,9 +275,9 @@ class Lineage(dendropy.Node):
         """
         if self._child_nodes:
             for nd in self.leaf_iter():
-                if not nd.extinct:
+                if nd.is_extant:
                     nd.edge.length += ngens
-        elif not self.extinct:
+        elif self.is_extant:
             self.edge.length += ngens
 
     def diversify(self,
@@ -301,7 +301,7 @@ class Lineage(dendropy.Node):
             children.append(c1)
             self.add_child(c1)
             assert c1.parent_node is self
-        self.extinct = True # a splitting event ==> extinction of parent lineage
+        self.is_extant = False # a splitting event ==> extinction of parent lineage
         return children
 
     def _debug_check_dump_biogeography(self, out):
@@ -684,14 +684,14 @@ class SupertrampSimulator(object):
                     continue
                 splitting_rate = self.diversification_model_s0 * (len(habitat.lineages) ** self.diversification_model_a)
                 for lineage in habitat.lineages:
-                    assert not lineage.extinct
+                    assert lineage.is_extant
                     lineage_habitats[lineage].add(habitat)
                     if self.rng.uniform(0, 1) <= splitting_rate:
                         lineage_splitting_habitat_localities[lineage].add(habitat)
         if not lineage_habitats:
             self.total_extinction_exception("Birth cycle (census): no lineages found in any habitat on any island")
         for lineage in lineage_splitting_habitat_localities:
-            assert not lineage.extinct
+            assert lineage.is_extant
             splitting_habitats = lineage_splitting_habitat_localities[lineage]
             if not self.sympatric_speciation:
                 if len(lineage_habitats[lineage]) == 1:
@@ -791,7 +791,7 @@ class SupertrampSimulator(object):
                 # print(death_rate)
                 to_remove = []
                 for lineage in habitat.lineages:
-                    assert not lineage.extinct
+                    assert lineage.is_extant
                     if self.rng.uniform(0, 1) <= death_rate:
                         to_remove.append(lineage)
                 for lineage in to_remove:
@@ -809,7 +809,7 @@ class SupertrampSimulator(object):
                 self.run_logger.debug("{lineage} extirpated from all islands and is now globally extinct".format(
                     lineage=lineage.logging_label,
                     ))
-                lineage.extinct = True
+                lineage.is_extant = False
                 if lineage is self.phylogeny.seed_node:
                     self.total_extinction_exception("Death cycle (pruning): seed node has been extirpated from all habitats on all islands")
                 elif not self.track_extinct_lineages:
