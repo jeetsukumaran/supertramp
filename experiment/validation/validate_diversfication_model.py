@@ -13,6 +13,32 @@ except ImportError:
 from supertramp import utility
 from supertramp import simulate
 
+class Sample(object):
+
+    def __init__(self, simulator):
+        self.data = {}
+        self.sample_params(simulator)
+        self.sample_data(simulator)
+
+    def sample_params(self, simulator):
+        self.data["gen"] = simulator.current_gen
+        self.data["s0"] = simulator.diversification_model_s0
+        self.data["e0"] = simulator.diversification_model_e0
+
+    def sample_data(self, simulator):
+        # number of extant lineages
+        # number of lineages produced
+        # number of lineages extinct
+        self.data["num_extant_lineages"] = simulator.count_extant_lineages()
+
+class Sampler(object):
+
+    def __init__(self):
+        self.samples = []
+
+    def sample(self, simulator):
+        self.samples.append(Sample(simulator))
+
 class DiversificationSubmodelValidator(object):
 
     def __init__(self,
@@ -37,9 +63,7 @@ class DiversificationSubmodelValidator(object):
         self.delete_simulation_log_file = auto_delete_simulation_log
         self.ngens = int(ngens)
         self.sample_frequency = int(sample_frequency)
-
-    def analyze(self, simulator):
-        pass
+        self.sampler = Sampler()
 
     def run(self):
         self.sim_log_stream = tempfile.NamedTemporaryFile(
@@ -59,8 +83,7 @@ class DiversificationSubmodelValidator(object):
                 stderr_logging_level="info",
                 log_to_file=True,
                 log_stream=self.sim_log_stream,
-                file_logging_level="debug",
-                )
+                file_logging_level="debug")
         s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
         for s0e0_idx, (s0, e0) in enumerate(itertools.product(s0e0_values, s0e0_values)):
             total_reps = 0
@@ -89,13 +112,12 @@ class DiversificationSubmodelValidator(object):
                                 name="supertramp", **configd)
                         while supertramp_simulator.current_gen < self.ngens:
                             supertramp_simulator.run(self.sample_frequency)
-                            self.analyze(supertramp_simulator)
-                    except simulate.TotalExtinctionException:
-                        self.test_logger.info("||SUPERTRAMP-TEST|| Replicate {} of {}: [t={}] total extinction of all lineages before termination condition".format(total_reps, self.nreps, supertramp_simulator.current_gen))
+                            self.sampler.sample(supertramp_simulator)
+                    except simulate.TotalExtinctionException as e:
+                        self.test_logger.info("||SUPERTRAMP-TEST|| Replicate {} of {}: [t={}] total extinction of all lineages before termination condition: {}".format(total_reps, self.nreps, supertramp_simulator.current_gen, e))
                         self.test_logger.info("||SUPERTRAMP-TEST|| Replicate {} of {}: restarting".format(total_reps, self.nreps))
                     else:
                         self.test_logger.info("||SUPERTRAMP-TEST|| Replicate {} of {}: completed to termination condition of {} generations".format(total_reps, self.nreps, self.ngens))
-                        supertramp_simulator.report()
                         break
                 total_reps += 1
 

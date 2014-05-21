@@ -82,6 +82,10 @@ def main():
             default=None,
             type=int,
             help="Frequency that data is sampled from the simulation (default = None [final report only]).")
+    output_options.add_argument("--track-extinct-lineages",
+            action="store_true",
+            default=False,
+            help="Do not prune lineages from the tree if they go extinct.")
 
     termination_condition_options = parser.add_argument_group("Termination Condition Options")
     termination_condition_options.add_argument("-g", "--ngens",

@@ -220,6 +220,7 @@ class Lineage(dendropy.Node):
         self.habitats = None
         self.final_distribution_label = None
         self.edge.length = 0
+        self.extinct = False
         if self.system is not None:
             self.bootstrap()
 
@@ -268,14 +269,15 @@ class Lineage(dendropy.Node):
             return self.final_distribution_label
         return "{}.{}".format(self.island_habitat_localities, self.habitat_types)
 
-    def add_age_to_tips(self, ngens=1):
+    def add_age_to_extant_tips(self, ngens=1):
         """
         Grows tree by adding ``ngens`` time unit(s) to all tips.
         """
         if self._child_nodes:
             for nd in self.leaf_iter():
-                nd.edge.length += ngens
-        else:
+                if not nd.extinct:
+                    nd.edge.length += ngens
+        elif not self.extinct:
             self.edge.length += ngens
 
     def diversify(self,
@@ -299,6 +301,7 @@ class Lineage(dendropy.Node):
             children.append(c1)
             self.add_child(c1)
             assert c1.parent_node is self
+        self.extinct = True # a splitting event ==> extinction of parent lineage
         return children
 
     def _debug_check_dump_biogeography(self, out):
@@ -321,11 +324,11 @@ class Phylogeny(dendropy.Tree):
         return Lineage(**kwargs)
     node_factory = classmethod(node_factory)
 
-    def add_age_to_tips(self, ngens=1):
+    def add_age_to_extant_tips(self, ngens=1):
         """
         Grows tree by adding ``ngens`` time unit(s) to all tips.
         """
-        self.seed_node.add_age_to_tips(ngens)
+        self.seed_node.add_age_to_extant_tips(ngens)
 
 class TotalExtinctionException(Exception):
     def __init__(self, *args, **kwargs):
@@ -384,10 +387,24 @@ class SupertrampSimulator(object):
         # create state variables
         self.habitat_indexer = IndexGenerator(0)
         self.lineage_indexer = IndexGenerator(0)
+
+        # system globals
         self.current_gen = 0
         self.habitat_types = []
         self.islands = []
         self.phylogeny = None
+
+        # run configuration
+        self.output_prefix = None
+        self.run_logger = None
+        self.name = None
+        self.tree_log = None
+        self.general_stats_log = None
+        self.rng = None
+        self.track_extinct_lineages = None
+        self.debug_mode = None
+        self.log_frequency = None
+        self.report_frequency = None
 
         # configure
         self.configure_simulator(kwargs)
@@ -490,6 +507,11 @@ class SupertrampSimulator(object):
                 raise TypeError("Cannot specify both 'rng' and 'random_seed'")
             self.run_logger.info("Using existing random number generator")
 
+        self.track_extinct_lineages = configd.pop("track_extinct_lineages", False)
+        if self.track_extinct_lineages:
+            self.run_logger.info("Extinct lineages will be tracked: lineages will be retained in the tree even if they are extirpated from all habitats in all islands")
+        else:
+            self.run_logger.info("Extinct lineages will not be tracked: lineages will be pruned from the tree if they are extirpated from all habitats in all islands")
         self.debug_mode = configd.pop("debug_mode", False)
         if self.debug_mode:
             self.run_logger.info("Running in DEBUG mode")
@@ -607,9 +629,13 @@ class SupertrampSimulator(object):
         self.run_logger.system = None
         return True
 
+    def total_extinction_exception(self, msg):
+        self.run_logger.info("Total extinction: {}".format(msg))
+        raise TotalExtinctionException(msg)
+
     def execute_life_cycle(self):
         self.current_gen += 1
-        self.phylogeny.add_age_to_tips(1)
+        self.phylogeny.add_age_to_extant_tips(1)
         if self.log_frequency > 0 and self.current_gen % self.log_frequency == 0:
             self.run_logger.info("Executing life-cycle {}".format(self.current_gen))
         for island in self.islands:
@@ -658,10 +684,14 @@ class SupertrampSimulator(object):
                     continue
                 splitting_rate = self.diversification_model_s0 * (len(habitat.lineages) ** self.diversification_model_a)
                 for lineage in habitat.lineages:
+                    assert not lineage.extinct
                     lineage_habitats[lineage].add(habitat)
                     if self.rng.uniform(0, 1) <= splitting_rate:
                         lineage_splitting_habitat_localities[lineage].add(habitat)
+        if not lineage_habitats:
+            self.total_extinction_exception("Birth cycle: no lineages found in any habitat on any island")
         for lineage in lineage_splitting_habitat_localities:
+            assert not lineage.extinct
             splitting_habitats = lineage_splitting_habitat_localities[lineage]
             if not self.sympatric_speciation:
                 if len(lineage_habitats[lineage]) == 1:
@@ -671,7 +701,7 @@ class SupertrampSimulator(object):
                 if len(lineage_habitats[lineage]) == len(splitting_habitats):
                     # lineage in splitting in every island in which it occurs;
                     # since sympatric speciation is disallowed: drop one
-                    splitting_habitats.remove(self.rng.choice(splitting_habitats))
+                    splitting_habitats.remove(self.rng.choice(list(splitting_habitats)))
             children = lineage.diversify(
                     lineage_indexer=self.lineage_indexer,
                     finalize_distribution_label=True,
@@ -761,6 +791,7 @@ class SupertrampSimulator(object):
                 # print(death_rate)
                 to_remove = []
                 for lineage in habitat.lineages:
+                    assert not lineage.extinct
                     if self.rng.uniform(0, 1) <= death_rate:
                         to_remove.append(lineage)
                 for lineage in to_remove:
@@ -770,19 +801,22 @@ class SupertrampSimulator(object):
                         ))
                     habitat.remove_lineage(lineage)
                     lineage_counts.subtract([lineage])
+        if not lineage_counts:
+            self.total_extinction_exception("Death cycle: no lineages found in any habitat on any island")
         for lineage in lineage_counts:
             count = lineage_counts[lineage]
             if count == 0:
                 self.run_logger.debug("{lineage} extirpated from all islands and is now globally extinct".format(
                     lineage=lineage.logging_label,
                     ))
+                lineage.extinct = True
                 if lineage is self.phylogeny.seed_node:
-                    raise TotalExtinctionException()
-                else:
+                    self.total_extinction_exception("Death cycle: seed node has been extirpated from all habitats on all islands")
+                elif not self.track_extinct_lineages:
                     self.phylogeny.prune_subtree(node=lineage,
                             update_splits=False, delete_outdegree_one=True)
-                    if self.phylogeny.seed_node.num_child_nodes() == 0:
-                        raise TotalExtinctionException()
+                    if self.phylogeny.seed_node.num_child_nodes() == 0 and self.phylogeny.seed_node.extinct:
+                        self.total_extinction_exception("Death cycle: no extant lineages on tree")
             elif self.debug_mode:
                 ## sanity checking ...
                 found = True
@@ -957,8 +991,8 @@ def repeat_run_supertramp(
                     **configd)
             try:
                 success = supertramp_simulator.run(ngens)
-            except TotalExtinctionException:
-                run_logger.info("||SUPERTRAMP-META|| Run {} of {}: [t={}] total extinction of all lineages before termination condition".format(rep+1, nreps, supertramp_simulator.current_gen))
+            except TotalExtinctionException as e:
+                run_logger.info("||SUPERTRAMP-META|| Run {} of {}: [t={}] total extinction of all lineages before termination condition: {}".format(rep+1, nreps, supertramp_simulator.current_gen, e))
                 run_logger.info("||SUPERTRAMP-META|| Run {} of {}: restarting".format(rep+1, nreps))
             else:
                 run_logger.info("||SUPERTRAMP-META|| Run {} of {}: completed to termination condition of {} generations".format(rep+1, nreps, ngens))
