@@ -191,13 +191,25 @@ class Island(object):
                         island2=dest_island.label,
                         habitat_type=lineage.habitat_type,
                         lineage=lineage.logging_label))
-                    dest_island.receive_migrant(lineage=lineage, habitat_type=lineage.habitat_type)
+                    dest_island.receive_migrant(
+                            lineage=lineage,
+                            habitat_type=lineage.habitat_type,
+                            from_island=self,     # not used for production class but
+                            from_habitat=habitat, # tests implement derived version of
+                            )                     # this class and override this method to
+                                                  # validate dispersal
+
 
     def process_migrants(self):
         for habitat in self.habitat_list:
             habitat.process_migrants()
 
-    def receive_migrant(self, lineage, habitat_type):
+    def receive_migrant(self,
+            lineage,
+            habitat_type,
+            from_island,
+            from_habitat,
+            ):
         assert lineage.habitat_type is habitat_type
         self.habitats_by_type[habitat_type].receive_migrant(lineage)
 
@@ -335,6 +347,8 @@ class TotalExtinctionException(Exception):
         Exception.__init__(self, *args, **kwargs)
 
 class SupertrampSimulator(object):
+
+    island_type = Island
 
     @staticmethod
     def simulation_model_arg_parser():
@@ -475,7 +489,10 @@ class SupertrampSimulator(object):
         self.run_logger.info("Diversification model, s0: {}".format(self.diversification_model_s0))
         self.diversification_model_e0 = model_params_d.pop("diversification_model_e0", 0.001)
         self.run_logger.info("Diversification model, e0: {}".format(self.diversification_model_e0))
-        self.run_logger.info("Projected habitat species richness (s0/e0): {}".format(self.diversification_model_s0/self.diversification_model_e0))
+        if self.diversification_model_e0 > 0:
+            self.run_logger.info("Projected habitat species richness (s0/e0): {}".format(self.diversification_model_s0/self.diversification_model_e0))
+        else:
+            self.run_logger.info("Extinction rate is 0")
 
         # Nice Shift/Evolution submodel
         self.global_lineage_niche_evolution_probability = model_params_d.pop("niche_evolution_probability", 0.01)
@@ -559,7 +576,7 @@ class SupertrampSimulator(object):
 
         # create islands
         for island_idx, island_label in enumerate(self.island_labels):
-            island = Island(
+            island = self.__class__.island_type(
                     index=island_idx,
                     rng=self.rng,
                     label=island_label,
