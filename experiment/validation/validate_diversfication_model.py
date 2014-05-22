@@ -10,7 +10,7 @@ try:
     from StringIO import StringIO # Python 2 legacy support: StringIO in this module is the one needed (not io)
 except ImportError:
     from io import StringIO # Python 3
-from supertramp import sample
+from supertramp import monitor
 from supertramp import utility
 from supertramp import simulate
 
@@ -40,42 +40,42 @@ class DiversificationSubmodelValidator(object):
         self.sample_frequency = int(sample_frequency)
 
         # create sampler
-        self.simulator_sampler = sample.SimulatorSampler()
+        self.simulator_monitor = monitor.SimulatorMonitor()
 
         # params
-        self.simulator_sampler.add_sampler(
+        self.simulator_monitor.add_attribute_tracker(
                 attr_name="current_gen",
                 field_name="gen",
                 sample_diffs=False,
                 )
-        self.simulator_sampler.add_sampler(
+        self.simulator_monitor.add_attribute_tracker(
                 attr_name="diversification_model_s0",
                 field_name="s0",
                 sample_diffs=False,
                 )
-        self.simulator_sampler.add_sampler(
+        self.simulator_monitor.add_attribute_tracker(
                 attr_name="diversification_model_e0",
                 field_name="e0",
                 sample_diffs=False,
                 )
 
         # data
-        self.simulator_sampler.add_sampler(
+        self.simulator_monitor.add_attribute_tracker(
                 attr_name="num_extant_lineages",
                 field_name="num_extant_lineages",
                 sample_diffs=True,
                 )
-        self.simulator_sampler.add_sampler(
+        self.simulator_monitor.add_attribute_tracker(
                 attr_name="num_births",
                 field_name="num_births",
                 sample_diffs=True,
                 )
-        self.simulator_sampler.add_sampler(
+        self.simulator_monitor.add_attribute_tracker(
                 attr_name="num_extinctions",
                 field_name="num_extinctions",
                 sample_diffs=True,
                 )
-        self.simulator_sampler.add_sampler(
+        self.simulator_monitor.add_attribute_tracker(
                 attr_name="num_extirpations",
                 field_name="num_extirpations",
                 sample_diffs=True,
@@ -155,7 +155,7 @@ class DiversificationSubmodelValidator(object):
                                 name="supertramp", **configd)
                         while supertramp_simulator.current_gen < self.ngens:
                             supertramp_simulator.run(self.sample_frequency)
-                            self.simulator_sampler.sample(supertramp_simulator)
+                            self.simulator_monitor.sample(supertramp_simulator)
                         supertramp_simulator.report()
                     except simulate.TotalExtinctionException as e:
                         self.test_logger.info("||SUPERTRAMP-TEST|| Replicate {} of {}: [t={}] total extinction of all lineages before termination condition: {}".format(current_rep, self.nreps, supertramp_simulator.current_gen, e))
@@ -165,7 +165,7 @@ class DiversificationSubmodelValidator(object):
                         break
 
     def analyze(self):
-        df = self.simulator_sampler.as_data_frame()
+        df = self.simulator_monitor.as_data_frame()
         print(df.describe())
 
 def main():
