@@ -787,8 +787,6 @@ class SupertrampSimulator(object):
                         splitting_lineage=lineage.logging_label,
                         splitting_lineage_habitat_type=lineage.habitat_type.label,
                         daughter_lineage0=c0.logging_label,
-                        daughter_lineage1=c1.logging_label,
-                        daughter_lineage1_habitat_type=c1.habitat_type.label,
                         island=habitat.island.label,
                         ))
             assert c0_placed

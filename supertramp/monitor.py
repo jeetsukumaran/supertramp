@@ -52,6 +52,7 @@ class SimulatorMonitor(object):
             tracker.sample(simulator, record)
         self.records.append(record)
         setattr(simulator, "prev_sampled_generation", simulator.current_gen)
+        return record
 
     def as_data_frame(self):
         return pandas.DataFrame(self.records)

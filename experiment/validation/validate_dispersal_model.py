@@ -77,14 +77,18 @@ class DispersalRatesValidator():
             dispersal_rate,
             dispersal_model="unconstrained",
             num_habitat_types=1,
+            # diversification_model_s0=0.01,
+            # diversification_model_e0=0.00001,
+            diversification_model_s0=0.0,
+            diversification_model_e0=0.0,
             niche_evolution_probability=0.0
             ):
         cls = self.__class__
         simulator = HackedSupertrampSimulator(
                 num_islands=num_islands,
                 num_habitat_types=num_habitat_types,
-                diversification_model_s0=0.0,
-                diversification_model_e0=0.0,
+                diversification_model_s0=diversification_model_s0,
+                diversification_model_e0=diversification_model_e0,
                 diversification_model_a=-0.5,
                 diversification_model_b=0.5,
                 dispersal_model=dispersal_model,
@@ -101,7 +105,7 @@ class DispersalRatesValidator():
         return simulator
 
     def run(self):
-        for dispersal_rate in (1e-6, 1e-4, 1e-2, 1e-1):
+        for dispersal_rate in (1e-4, 1e-2):
             simulator_monitor = monitor.SimulatorMonitor()
             simulator_monitor.add_attribute_tracker(
                     attr_name="current_gen",
@@ -129,9 +133,10 @@ class DispersalRatesValidator():
                 simulator = self.get_simulator(
                         num_islands=num_islands,
                         dispersal_rate=dispersal_rate)
-                for ngen in range(100):
-                    simulator.run(100)
-                    simulator_monitor.sample(simulator)
+                for nsamples in range(200):
+                    simulator.run(1000)
+                    record = simulator_monitor.sample(simulator)
+                    # print("[sample] {}: {}".format(dispersal_rate, record["observed_dispersal_rate"]))
             df = simulator_monitor.as_data_frame()
             print("{: 10.4e}: {:6.4e}".format(dispersal_rate, df["observed_dispersal_rate"].mean()))
 
