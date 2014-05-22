@@ -6,6 +6,7 @@ import random
 import unittest
 from supertramp import utility
 from supertramp import simulate
+from supertramp import monitor
 
 class HackedIsland(simulate.Island):
 
@@ -33,17 +34,30 @@ class HackedIsland(simulate.Island):
 class HackedSupertrampSimulator(simulate.SupertrampSimulator):
     island_type = HackedIsland
 
+    def __init__(self, *args, **kwargs):
+        simulate.SupertrampSimulator.__init__(self, *args, **kwargs)
+
     def clear_dispersal_records(self):
         for island in self.islands:
             island.dispersal_records = []
 
-    def compile_dispersal_records(self):
-        all_records = []
+    def _get_total_dispersals(self):
+        n = 0
         for island in self.islands:
-            all_records.extend(island.dispersal_records)
-        return all_records
+            n += len(island.dispersal_records)
+        return n
+    total_dispersals = property(_get_total_dispersals)
 
-class DispersalRatesTestCase(unittest.TestCase):
+class RateTracker(object):
+
+    def sample(self, simulator, record):
+        count = record["delta_observed_total_disperals"]
+        period = record["delta_gen"]
+        rate = count/period
+        record["observed_dispersal_rate"] = rate
+
+
+class DispersalRatesValidator():
 
     @classmethod
     def setUpClass(cls):
@@ -86,18 +100,42 @@ class DispersalRatesTestCase(unittest.TestCase):
             )
         return simulator
 
-    def test_basic(self):
-        for dispersal_rate in (1e-6, 1e-4, 1e-2):
-            simulator = self.get_simulator(
-                    num_islands=2,
-                    dispersal_rate=dispersal_rate)
-            for ngen in range(1000):
-                simulator.clear_dispersal_records()
-                simulator.execute_life_cycle()
-                all_records = simulator.compile_dispersal_records()
-                for record in all_records:
-                    print(record)
+    def run(self):
+        for dispersal_rate in (1e-6, 1e-4, 1e-2, 1e-1):
+            simulator_monitor = monitor.SimulatorMonitor()
+            simulator_monitor.add_attribute_tracker(
+                    attr_name="current_gen",
+                    field_name="gen",
+                    sample_diffs=True,
+                    )
+            simulator_monitor.add_attribute_tracker(
+                    attr_name="num_islands",
+                    field_name="num_islands",
+                    sample_diffs=False,
+                    )
+            simulator_monitor.add_attribute_tracker(
+                    attr_name="global_dispersal_rate",
+                    field_name="global_dispersal_rate",
+                    sample_diffs=False,
+                    )
+            simulator_monitor.add_attribute_tracker(
+                    attr_name="total_dispersals",
+                    field_name="observed_total_disperals",
+                    sample_diffs=True,
+                    )
+            simulator_monitor.trackers.append(RateTracker())
+            # for dispersal_rate in (1e-6, 1e-4, 1e-2):
+            for num_islands in (2,):
+                simulator = self.get_simulator(
+                        num_islands=num_islands,
+                        dispersal_rate=dispersal_rate)
+                for ngen in range(100):
+                    simulator.run(100)
+                    simulator_monitor.sample(simulator)
+            df = simulator_monitor.as_data_frame()
+            print("{: 10.4e}: {:6.4e}".format(dispersal_rate, df["observed_dispersal_rate"].mean()))
 
 if __name__ == "__main__":
-    unittest.main()
-
+    d = DispersalRatesValidator()
+    d.setUpClass()
+    d.run()
