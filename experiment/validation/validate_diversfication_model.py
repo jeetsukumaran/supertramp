@@ -6,72 +6,13 @@ import argparse
 import itertools
 import tempfile
 import random
-import pandas
 try:
     from StringIO import StringIO # Python 2 legacy support: StringIO in this module is the one needed (not io)
 except ImportError:
     from io import StringIO # Python 3
+from supertramp import sample
 from supertramp import utility
 from supertramp import simulate
-
-class Sample(object):
-
-    def __init__(self, simulator):
-        self.data = {}
-        self.sample_params(simulator)
-        self.sample_data(simulator)
-
-    def sample_params(self, simulator):
-        self.data["sampled_gen"] = simulator.current_gen
-        self.data["s0"] = simulator.diversification_model_s0
-        self.data["e0"] = simulator.diversification_model_e0
-
-    def sample_data(self, simulator):
-        # number of extant lineages
-        # number of lineages produced
-        # number of lineages extinct
-        self.data["gen"] = simulator.current_gen
-        for attr_name in (
-                "num_extant_lineages",
-                "num_births",
-                "num_extinctions",
-                "num_extirpations",
-                ):
-            self.sample_attribute(simulator, attr_name)
-
-    def sample_attribute(self,
-            simulator,
-            attr_name,
-            param_field_name=None):
-        if param_field_name is None:
-            param_field_name = attr_name
-        self.data[param_field_name] = float(getattr(simulator, attr_name))
-        if not hasattr(simulator, "prev_" + attr_name):
-            setattr(simulator, "prev_" + attr_name, 0.0)
-        if not hasattr(simulator, "prev_sampled_generation"):
-            setattr(simulator, "prev_sampled_generation", 0)
-        self.data["prev_" + param_field_name] = "x"
-        self.data["prev_" + param_field_name] = getattr(simulator, "prev_" + attr_name)
-        self.data["delta_" + param_field_name] = self.data[param_field_name] - self.data["prev_" + param_field_name]
-        if simulator.current_gen == simulator.prev_sampled_generation:
-            self.data["rate_of_change_" + param_filed_name] = "NA"
-        else:
-            self.data["rate_of_change_" + param_field_name] = self.data["delta_" + param_field_name]  / (simulator.current_gen - simulator.prev_sampled_generation)
-
-    def as_dict(self):
-        return dict(self.data)
-
-class Sampler(object):
-
-    def __init__(self):
-        self.samples = []
-
-    def sample(self, simulator):
-        self.samples.append(Sample(simulator))
-
-    def as_data_frame(self):
-        return pandas.DataFrame([s.as_dict() for s in self.samples])
-
 
 class DiversificationSubmodelValidator(object):
 
@@ -97,7 +38,48 @@ class DiversificationSubmodelValidator(object):
         self.auto_delete_output_files = auto_delete_output_files
         self.ngens = int(ngens)
         self.sample_frequency = int(sample_frequency)
-        self.sampler = Sampler()
+
+        # create sampler
+        self.simulator_sampler = sample.SimulatorSampler()
+
+        # params
+        self.simulator_sampler.add_sampler(
+                attr_name="current_gen",
+                field_name="gen",
+                sample_diffs=False,
+                )
+        self.simulator_sampler.add_sampler(
+                attr_name="diversification_model_s0",
+                field_name="s0",
+                sample_diffs=False,
+                )
+        self.simulator_sampler.add_sampler(
+                attr_name="diversification_model_e0",
+                field_name="e0",
+                sample_diffs=False,
+                )
+
+        # data
+        self.simulator_sampler.add_sampler(
+                attr_name="num_extant_lineages",
+                field_name="num_extant_lineages",
+                sample_diffs=True,
+                )
+        self.simulator_sampler.add_sampler(
+                attr_name="num_births",
+                field_name="num_births",
+                sample_diffs=True,
+                )
+        self.simulator_sampler.add_sampler(
+                attr_name="num_extinctions",
+                field_name="num_extinctions",
+                sample_diffs=True,
+                )
+        self.simulator_sampler.add_sampler(
+                attr_name="num_extirpations",
+                field_name="num_extirpations",
+                sample_diffs=True,
+                )
 
     def get_model_params_dict(self):
         model_params_d = {}
@@ -128,10 +110,10 @@ class DiversificationSubmodelValidator(object):
                 file_logging_level="debug")
         s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
         s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
-        for s0e0_idx, (s0, e0) in enumerate(itertools.product(s0e0_values, s0e0_values)):
-        # s0e0_values = (
-        #         (0.01, 0.001),
-        #         )
+        # for s0e0_idx, (s0, e0) in enumerate(itertools.product(s0e0_values, s0e0_values)):
+        s0e0_values = (
+                (0.01, 0.001),
+                )
         for s0e0_idx, (s0, e0) in enumerate(s0e0_values):
             output_file_tag = "_s0={}_e0={}_".format(s0, e0)
             output_files_d = {}
@@ -173,7 +155,7 @@ class DiversificationSubmodelValidator(object):
                                 name="supertramp", **configd)
                         while supertramp_simulator.current_gen < self.ngens:
                             supertramp_simulator.run(self.sample_frequency)
-                            self.sampler.sample(supertramp_simulator)
+                            self.simulator_sampler.sample(supertramp_simulator)
                         supertramp_simulator.report()
                     except simulate.TotalExtinctionException as e:
                         self.test_logger.info("||SUPERTRAMP-TEST|| Replicate {} of {}: [t={}] total extinction of all lineages before termination condition: {}".format(current_rep, self.nreps, supertramp_simulator.current_gen, e))
@@ -183,7 +165,7 @@ class DiversificationSubmodelValidator(object):
                         break
 
     def analyze(self):
-        df = self.sampler.as_data_frame()
+        df = self.simulator_sampler.as_data_frame()
         print(df.describe())
 
 def main():

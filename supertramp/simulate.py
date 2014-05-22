@@ -847,7 +847,7 @@ class SupertrampSimulator(object):
                 elif not self.track_extinct_lineages:
                     self.phylogeny.prune_subtree(node=lineage,
                             update_splits=False, delete_outdegree_one=True)
-                    if self.phylogeny.seed_node.num_child_nodes() == 0 and self.phylogeny.seed_node.extinct:
+                    if self.phylogeny.seed_node.num_child_nodes() == 0 and not self.phylogeny.seed_node.is_extant:
                         self.total_extinction_exception("Death cycle (post-pruning): no extant lineages on tree")
             elif self.debug_mode:
                 ## sanity checking ...
