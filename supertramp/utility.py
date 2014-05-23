@@ -61,8 +61,10 @@ class RunLogger(object):
             self._log.addHandler(handler1)
             self.handlers.append(handler1)
         if kwargs.get("log_to_file", True):
-            log_stream = kwargs.get("log_stream", \
-                open(kwargs.get("log_path", self.name + ".log"), "w"))
+            if "log_stream" in kwargs:
+                log_stream = kwargs.get("log_stream")
+            else:
+                log_stream = open(kwargs.get("log_path", self.name + ".log"), "w")
             handler2 = logging.StreamHandler(log_stream)
             file_logging_level = self.get_logging_level(kwargs.get("file_logging_level", logging.DEBUG))
             handler2.setLevel(file_logging_level)
