@@ -111,6 +111,9 @@ class DiversificationSubmodelValidator(object):
         # s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
         # for s0e0_idx, (s0, e0) in enumerate(itertools.product(s0e0_values, s0e0_values)):
         s0e0_values = (
+                (0.1, 0.01),
+                (0.1, 0.001),
+                (0.01, 0.001),
                 (0.01, 0.0001),
                 )
         for s0e0_idx, (s0, e0) in enumerate(s0e0_values):
@@ -212,7 +215,7 @@ def main():
             default=100,
             help="Frequency (number of generations) of samples to be taken during each replicate run (default = %(default)s).")
     parser.add_argument("--log-frequency",
-            default=100,
+            default=1000,
             type=int,
             help="Frequency that background progress messages get written to the log (default = %(default)s).")
     parser.add_argument("--file-logging-level",
