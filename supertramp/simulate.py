@@ -705,16 +705,36 @@ class SupertrampSimulator(object):
         #   simultaneously in the same generation.
         lineage_splitting_habitat_localities = collections.defaultdict(set)
         lineage_habitats = collections.defaultdict(set)
+
+        # # ORIGINAL: same rate for all lineages
+        # for island in self.islands:
+        #     for habitat in island.habitat_list:
+        #         if not habitat.lineages:
+        #             continue
+        #         splitting_rate = self.diversification_model_s0 * (len(habitat.lineages) ** self.diversification_model_a)
+        #         for lineage in habitat.lineages:
+        #             assert lineage.is_extant
+        #             lineage_habitats[lineage].add(habitat)
+        #             if self.rng.uniform(0, 1) <= splitting_rate:
+        #                 lineage_splitting_habitat_localities[lineage].add(habitat)
+
+        # EXPERIMENTAL: rate dynamically-updated
         for island in self.islands:
             for habitat in island.habitat_list:
                 if not habitat.lineages:
                     continue
-                splitting_rate = self.diversification_model_s0 * (len(habitat.lineages) ** self.diversification_model_a)
-                for lineage in habitat.lineages:
+                pool = list(habitat.lineages)
+                richness = len(pool)
+                self.rng.shuffle(pool)
+                while pool:
+                    lineage = pool.pop()
                     assert lineage.is_extant
                     lineage_habitats[lineage].add(habitat)
+                    splitting_rate = self.diversification_model_s0 * (richness ** self.diversification_model_a)
                     if self.rng.uniform(0, 1) <= splitting_rate:
                         lineage_splitting_habitat_localities[lineage].add(habitat)
+                        richness += 1
+
         if not lineage_habitats:
             self.total_extinction_exception("Birth cycle (census): no lineages found in any habitat on any island")
         for lineage in lineage_splitting_habitat_localities:
@@ -811,17 +831,30 @@ class SupertrampSimulator(object):
         for island in self.islands:
             for habitat in island.habitat_list:
                 lineage_counts.update(habitat.lineages)
-                n = len(habitat.lineages)
-                if n <= 0:
+                richness = len(habitat.lineages)
+                if richness <= 0:
                     continue
-                death_rate = self.diversification_model_e0 * (len(habitat.lineages) ** self.diversification_model_b)
-                # print(self.diversification_model_e0 , (len(habitat.lineages) , self.diversification_model_b))
-                # print(death_rate)
+
+                # # ORIGINAL: same rate for all lineages
+                # death_rate = self.diversification_model_e0 * (richness ** self.diversification_model_b)
+                # to_remove = []
+                # for lineage in habitat.lineages:
+                #     assert lineage.is_extant
+                #     if self.rng.uniform(0, 1) <= death_rate:
+                #         to_remove.append(lineage)
+
+                # EXPERIMENTAL: rate dynamically-updated
                 to_remove = []
-                for lineage in habitat.lineages:
+                pool = list(habitat.lineages)
+                self.rng.shuffle(pool)
+                while pool:
+                    lineage = pool.pop()
                     assert lineage.is_extant
+                    death_rate = self.diversification_model_e0 * (richness ** self.diversification_model_b)
                     if self.rng.uniform(0, 1) <= death_rate:
                         to_remove.append(lineage)
+                        richness -= 1
+
                 for lineage in to_remove:
                     self.run_logger.debug("{lineage} extirpated from island {island}".format(
                         lineage=lineage.logging_label,
@@ -830,6 +863,8 @@ class SupertrampSimulator(object):
                     self.num_extirpations += 1
                     habitat.remove_lineage(lineage)
                     lineage_counts.subtract([lineage])
+
+
         if not lineage_counts:
             self.total_extinction_exception("Death cycle (census): no lineages found in any habitat on any island")
         for lineage in lineage_counts:
