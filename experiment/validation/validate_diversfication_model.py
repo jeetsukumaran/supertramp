@@ -88,7 +88,7 @@ class DiversificationSubmodelValidator(object):
         model_params_d["diversification_model_a"] = -0.5
         model_params_d["diversification_model_b"] = 0.5
         model_params_d["dispersal_model"] = "unconstrained"
-        model_params_d["dispersal_rate"] = 0.0
+        model_params_d["dispersal_rate"] = 1e-3
         model_params_d["niche_evolution_probability"] = 0.0
         return model_params_d
 
@@ -108,11 +108,10 @@ class DiversificationSubmodelValidator(object):
                 log_to_file=True,
                 log_stream=self.sim_log_stream,
                 file_logging_level="debug")
-        s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
-        s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
+        # s0e0_values = (1e-8, 1e-6, 1e-4, 1e-2)
         # for s0e0_idx, (s0, e0) in enumerate(itertools.product(s0e0_values, s0e0_values)):
         s0e0_values = (
-                (0.01, 0.001),
+                (0.01, 0.0001),
                 )
         for s0e0_idx, (s0, e0) in enumerate(s0e0_values):
             output_file_tag = "_s0={}_e0={}_".format(s0, e0)
@@ -134,7 +133,12 @@ class DiversificationSubmodelValidator(object):
             current_rep = 0
             while current_rep < self.nreps:
                 current_rep += 1
+                num_attempts = 0
                 while True:
+                    num_attempts += 1
+                    if num_attempts > 100:
+                        self.test_logger.info("||SUPERTRAMP-TEST|| Maximum number of retries exceeded: abandoning replicate completely")
+                        break
                     try:
                         self.test_logger.info("||SUPERTRAMP-TEST|| Starting replicate {rep} of {nreps} for diversification regime: s0={s0}, e0={e0}".format(
                             rep=current_rep,
@@ -163,10 +167,32 @@ class DiversificationSubmodelValidator(object):
                     else:
                         self.test_logger.info("||SUPERTRAMP-TEST|| Replicate {} of {}: completed to termination condition of {} generations".format(current_rep, self.nreps, self.ngens))
                         break
+            df = self.simulator_monitor.as_data_frame()
+            df = df[(df.s0 == s0) & (df.e0 == e0)]
+            print("s0={s0}, e0={e0}: "
+                  " num_extant_linages={num_extant_lineages};"
+                  " num_births={num_births};"
+                  " num_extirpations={num_extirpations};"
+                  " num_extinctions={num_extinctions};"
+                  " birth_rate={birth_rate};"
+                  " extirpation_rate={extirpation_rate};"
+                  " extinction_rate={extinction_rate};"
+                  "".format(
+                s0=s0,
+                e0=e0,
+                num_extant_lineages=df["num_extant_lineages"].mean(),
+                num_births=df["num_births"].mean(),
+                num_extirpations=df["num_extirpations"].mean(),
+                num_extinctions=df["num_extinctions"].mean(),
+                birth_rate=df["rate_of_change_num_births"].mean(),
+                extirpation_rate=df["rate_of_change_num_extirpations"].mean(),
+                extinction_rate=df["rate_of_change_num_extinctions"].mean(),
+                ))
 
     def analyze(self):
-        df = self.simulator_monitor.as_data_frame()
-        print(df.describe())
+        pass
+        # df = self.simulator_monitor.as_data_frame()
+        # print(df.describe())
 
 def main():
     parser = argparse.ArgumentParser()
@@ -213,7 +239,6 @@ def main():
             auto_delete_output_files=not args.preserve_run_output)
     validator.run()
     validator.analyze()
-
 
 if __name__ == "__main__":
     main()
