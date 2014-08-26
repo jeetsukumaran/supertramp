@@ -260,6 +260,11 @@ class Lineage(dendropy.Node):
         # this habitat type!!!
         # self.habitat_types[habitat.habitat_type.index] = 0
 
+    def iterate_habitats(self):
+        for idx, habitat_presence in enumerate(self.habitats):
+            if habitat_presence == 1:
+                yield self.system.habitats_by_index_map[idx]
+
     def _get_label(self):
         return "S{:d}.{}".format(self.index, self.distribution_label)
     def _set_label(self, v):
@@ -363,29 +368,37 @@ class SupertrampSimulator(object):
                 default=3,
                 help="number of habitat types per island (default = %(default)s).")
         model_diversification_submodel_params = parser.add_argument_group("MODEL: Diversification Submodel Parameters")
-        model_diversification_submodel_params.add_argument("-a", "--diversification-model-a",
+        model_diversification_submodel_params.add_argument("-b", "--diversification-model-birth-rate",
                 type=float,
-                default=-0.5,
-                help="'a' parameter of the diversfication model (default: %(default)s).")
-        model_diversification_submodel_params.add_argument("-b", "--diversification-model-b",
+                default=0.01,
+                help="diversfication model birth rate (default: %(default)s).")
+        model_diversification_submodel_params.add_argument("-d", "--diversification-model-death-rate",
                 type=float,
-                default=0.5,
+                default=0.01,
                 help="'b' parameter of the diversfication model (default: %(default)s).")
-        model_diversification_submodel_params.add_argument("-s", "--diversification-model-s0", "--s0",
-                type=float,
-                default=0.001,
-                help="'s' parameter of the diversfication model (default: %(default)s).")
-        model_diversification_submodel_params.add_argument("-e", "--diversification-model-e0", "--e0",
-                type=float,
-                default=0.0001,
-                help="'e' parameter of the diversfication model (default: %(default)s).")
+        # model_diversification_submodel_params.add_argument("-a", "--diversification-model-a",
+        #         type=float,
+        #         default=-0.5,
+        #         help="'a' parameter of the diversfication model (default: %(default)s).")
+        # model_diversification_submodel_params.add_argument("-b", "--diversification-model-b",
+        #         type=float,
+        #         default=0.5,
+        #         help="'b' parameter of the diversfication model (default: %(default)s).")
+        # model_diversification_submodel_params.add_argument("-s", "--diversification-model-s0", "--s0",
+        #         type=float,
+        #         default=0.001,
+        #         help="'s' parameter of the diversfication model (default: %(default)s).")
+        # model_diversification_submodel_params.add_argument("-e", "--diversification-model-e0", "--e0",
+        #         type=float,
+        #         default=0.0001,
+        #         help="'e' parameter of the diversfication model (default: %(default)s).")
         model_dispersal_submodel_params = parser.add_argument_group("MODEL: Dispersal Submodel Parameters")
-        model_dispersal_submodel_params.add_argument("--dispersal-model",
+        model_dispersal_submodel_params.add_argument("-m", "--dispersal-model",
                 type=str,
                 default="unconstrained",
                 choices=["constrained", "unconstrained"],
                 help="Dispersal model: constrained or unconstrained by habitat")
-        model_dispersal_submodel_params.add_argument("-d", "--dispersal-rate",
+        model_dispersal_submodel_params.add_argument("-D", "--dispersal-rate",
                 default=0.01,
                 type=float,
                 help="Dispersal rate (default = %(default)s).")
@@ -406,11 +419,12 @@ class SupertrampSimulator(object):
         self.current_gen = 0
         self.habitat_types = []
         self.islands = []
+        self.habitats_by_index_map = {}
         self.phylogeny = None
 
         # system globals: metrics
         self.num_births = 0
-        self.num_extirpations = 0
+        # self.num_extirpations = 0
         self.num_extinctions = 0
         self.num_niche_shifts = 0
 
@@ -481,18 +495,28 @@ class SupertrampSimulator(object):
         self.run_logger.info("Dispersal rate, d: {}".format(self.global_dispersal_rate))
 
         # Diversification submodel
-        self.diversification_model_a = model_params_d.pop("diversification_model_a", -0.5)
-        self.run_logger.info("Diversification model, a: {}".format(self.diversification_model_a))
-        self.diversification_model_b = model_params_d.pop("diversification_model_b", 0.5)
-        self.run_logger.info("Diversification model, b: {}".format(self.diversification_model_b))
-        self.diversification_model_s0 = model_params_d.pop("diversification_model_s0", 0.1)
-        self.run_logger.info("Diversification model, s0: {}".format(self.diversification_model_s0))
-        self.diversification_model_e0 = model_params_d.pop("diversification_model_e0", 0.001)
-        self.run_logger.info("Diversification model, e0: {}".format(self.diversification_model_e0))
-        if self.diversification_model_e0 > 0:
-            self.run_logger.info("Projected habitat species richness (s0/e0): {}".format(self.diversification_model_s0/self.diversification_model_e0))
-        else:
-            self.run_logger.info("Extinction rate is 0")
+        self.diversification_model_birth_rate = model_params_d.pop("diversification_model_birth_rate", 0.01)
+        self.run_logger.info("Diversification model, birth-rate: {}".format(self.diversification_model_birth_rate))
+        self.diversification_model_death_rate = model_params_d.pop("diversification_model_death_rate", 0.01)
+        self.run_logger.info("Diversification model, death-rate: {}".format(self.diversification_model_death_rate))
+        self.diversification_model_sum_of_birth_and_death_rate = self.diversification_model_birth_rate + self.diversification_model_death_rate
+
+        # Not strictly necessary in theory, but current implementation behaves
+        # better if this true
+        assert self.diversification_model_sum_of_birth_and_death_rate <= 1.0
+
+        # self.diversification_model_a = model_params_d.pop("diversification_model_a", -0.5)
+        # self.run_logger.info("Diversification model, a: {}".format(self.diversification_model_a))
+        # self.diversification_model_b = model_params_d.pop("diversification_model_b", 0.5)
+        # self.run_logger.info("Diversification model, b: {}".format(self.diversification_model_b))
+        # self.diversification_model_s0 = model_params_d.pop("diversification_model_s0", 0.1)
+        # self.run_logger.info("Diversification model, s0: {}".format(self.diversification_model_s0))
+        # self.diversification_model_e0 = model_params_d.pop("diversification_model_e0", 0.001)
+        # self.run_logger.info("Diversification model, e0: {}".format(self.diversification_model_e0))
+        # if self.diversification_model_e0 > 0:
+        #     self.run_logger.info("Projected habitat species richness (s0/e0): {}".format(self.diversification_model_s0/self.diversification_model_e0))
+        # else:
+        #     self.run_logger.info("Extinction rate is 0")
 
         # Nice Shift/Evolution submodel
         self.global_lineage_niche_evolution_probability = model_params_d.pop("niche_evolution_probability", 0.01)
@@ -585,6 +609,11 @@ class SupertrampSimulator(object):
                     run_logger=self.run_logger)
             self.islands.append(island)
         self.all_islands_bitmask = (1 << len(self.islands)) - 1
+        assert self.habitat_indexer.index == (len(self.island_labels) * len(self.habitat_types))
+        self.habitats_by_index_map = {}
+        for island in self.islands:
+            for habitat in island.habitat_list:
+                self.habitats_by_index_map[habitat.index] = habitat
 
         # set up dispersal regime
         if self.dispersal_model == "unconstrained":
@@ -671,13 +700,193 @@ class SupertrampSimulator(object):
         if self.report_frequency is not None and self.report_frequency > 0 and self.current_gen % self.report_frequency == 0:
             self.report()
 
-    def run_diversification(self):
-        if self.rng.uniform(0, 1) <= 0.5:
-            self.run_lineage_birth()
-            self.run_lineage_death()
+    def run_diversification(self, global_lineage_death=True):
+        """
+        Parameters
+        ----------
+        global_lineage_death : bool
+            If `True`, then a lineage that experiences an extinction event will
+            go globally-extinct, i.e. be removed from *all* habitats in which
+            it occurs. If `False`, then the extinction will actually be an
+            extirpation, or local extinction event, i.e., it will be removed
+            from *one* of the habitats/islands in which it occurs.
+
+        """
+        extincting_lineages = set()
+        splitting_lineages = set()
+        visited_lineages = 0
+        for lineage in self.phylogeny.leaf_node_iter():
+            if not lineage.is_extant:
+                continue
+            u = self.rng.uniform(0, 1)
+            if u <= self.diversification_model_death_rate:
+                extincting_lineages.add(lineage)
+            elif u <= self.diversification_model_sum_of_birth_and_death_rate:
+                splitting_lineages.add(lineage)
+            visited_lineages += 1
+        if not visited_lineages:
+            self.total_extinction_exception("Diversification cycle: no extant lineages found")
+        if extincting_lineages or splitting_lineages:
+            lineage_habitat_set_map = self._get_lineage_habitat_set_map()
+            for lineage in extincting_lineages:
+                if global_lineage_death:
+                    self._remove_lineage_globally(lineage, lineage_habitat_set_map[lineage])
+                else:
+                    self._remove_lineage_locally(lineage, lineage_habitat_set_map[lineage])
+            if self.debug_mode:
+                try:
+                    self.phylogeny._debug_check_tree()
+                except AttributeError:
+                    self.phylogeny.debug_check_tree()
+                self.run_logger.debug("DEBUG MODE: phylogeny structure is valid after processing extinctions")
+            for lineage in splitting_lineages:
+                self._split_lineage(lineage, lineage_habitat_set_map[lineage])
+            if self.debug_mode:
+                try:
+                    self.phylogeny._debug_check_tree()
+                except AttributeError:
+                    self.phylogeny.debug_check_tree()
+                self.run_logger.debug("DEBUG MODE: phylogeny structure is valid after processing speciations")
+
+    def _get_lineage_habitat_set_map(self):
+        """
+        Surveys all habitats and islands, and returns a dictionary where the
+        keys are lineages and the values are a set of habitats in which the
+        lineage occurs.
+        """
+        lineage_habitat_set_map = collections.defaultdict(set)
+        for island in self.islands:
+            for habitat in island.habitat_list:
+                for lineage in habitat.lineages:
+                    lineage_habitat_set_map[lineage].add(habitat)
+        return lineage_habitat_set_map
+
+    def _remove_lineage_globally(self, lineage, occurrence_habitats=None):
+        """
+        Removes `lineage` from *all* islands/habitats in which it occurs.
+        """
+        if occurrence_habitats is None:
+            occurrence_habitats = list(lineage.iterate_habitats)
+        for habitat in occurrence_habitats:
+            habitat.remove_lineage(lineage)
+        self._make_lineage_extinct_on_phylogeny(lineage)
+        self.run_logger.debug("{lineage} extirpated from all islands and is now globally extinct".format(
+            lineage=lineage.logging_label,
+            ))
+
+    def _remove_lineage_locally(self, lineage, occurrence_habitats=None):
+        """
+        Removes `lineage` from a random island habitat in which it occurs.
+        """
+        if occurrence_habitats is None:
+            occurrences = list(lineage.iterate_habitats())
         else:
-            self.run_lineage_death()
-            self.run_lineage_birth()
+            occurrences = list(occurrence_habitats)
+        if len(occurrences) == 0:
+            assert False
+        elif len(occurrences) == 1:
+            occurrences[0].remove_lineage(lineage)
+            self._make_lineage_extinct_on_phylogeny(lineage)
+            self.run_logger.debug("{lineage} extirpated from all islands and is now globally extinct".format(
+                lineage=lineage.logging_label,
+                ))
+        else:
+            h = self.rng.choice(occurrences)
+            h.remove_lineage(lineage)
+            self.run_logger.debug("{lineage} extirpated from island {island}".format(
+                lineage=lineage.logging_label,
+                island=h.island.label,
+                ))
+
+    def _split_lineage(self, lineage, occurrence_habitats=None):
+        assert lineage.is_extant
+        if occurrence_habitats is None:
+            occurrences = list(lineage.iterate_habitats())
+        else:
+            occurrences = list(occurrence_habitats)
+        if len(occurrences) == 0:
+            assert False
+        if len(occurrences) == 1:
+            # sympatric speciation
+            splitting_habitat = occurrences[0]
+        else:
+            # allopatric speciation
+            splitting_habitat = self.rng.choice(occurrences)
+
+        children = lineage.diversify(
+                lineage_indexer=self.lineage_indexer,
+                finalize_distribution_label=True,
+                nsplits=1)
+        assert len(children) == 2
+        self.num_births += 1
+        if self.debug_mode:
+            try:
+                self.phylogeny._debug_check_tree()
+            except AttributeError:
+                self.phylogeny.debug_check_tree()
+            self.run_logger.debug("DEBUG MODE: phylogeny structure is valid after lineage splitting")
+
+        c0 = children[0]
+        c_remaining = set(children[1:])
+        if len(self.habitat_types) > 1:
+            # assumes all children have the same habitat type
+            habitats_to_evolve_into = [ h for h in self.habitat_types if h is not c0.habitat_type ]
+            for c1 in c_remaining:
+                if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
+                    c1.habitat_type = self.rng.choice(habitats_to_evolve_into)
+
+        c0_placed = False
+        for habitat in occurrence_habitats:
+            habitat.remove_lineage(lineage)
+            if habitat is splitting_habitat:
+                c1 = c_remaining.pop()
+                habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
+                self.run_logger.debug("{splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') speciating to {daughter_lineage1} (with habitat type '{daughter_lineage1_habitat_type}') in island {island}".format(
+                    splitting_lineage=lineage.logging_label,
+                    splitting_lineage_habitat_type=lineage.habitat_type.label,
+                    daughter_lineage0=c0.logging_label,
+                    daughter_lineage1=c1.logging_label,
+                    daughter_lineage1_habitat_type=c1.habitat_type.label,
+                    island=habitat.island.label,
+                    ))
+                # if self.sympatric_speciation or self.single_island_mode:
+                if len(occurrence_habitats) == 1:
+                    # occurs only in one locality: force sympatric speciation
+                    habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+                    c0_placed = True
+                    self.run_logger.debug("{splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') continuing as {daughter_lineage0} in island {island}".format(
+                        splitting_lineage=lineage.logging_label,
+                        splitting_lineage_habitat_type=lineage.habitat_type.label,
+                        daughter_lineage0=c0.logging_label,
+                        daughter_lineage1=c1.logging_label,
+                        daughter_lineage1_habitat_type=c1.habitat_type.label,
+                        island=habitat.island.label,
+                        ))
+            else:
+                habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
+                c0_placed = True
+                self.run_logger.debug("{splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') continuing as {daughter_lineage0} in island {island}".format(
+                    splitting_lineage=lineage.logging_label,
+                    splitting_lineage_habitat_type=lineage.habitat_type.label,
+                    daughter_lineage0=c0.logging_label,
+                    island=habitat.island.label,
+                    ))
+        assert c0_placed
+        assert len(c_remaining) == 0
+
+    def _make_lineage_extinct_on_phylogeny(self, lineage):
+        lineage.is_extant = False
+        if lineage is self.phylogeny.seed_node:
+            self.total_extinction_exception("Death cycle (pruning): seed node has been extirpated from all habitats on all islands")
+        self.phylogeny.prune_subtree(node=lineage, update_splits=False, delete_outdegree_one=True)
+        if self.phylogeny.seed_node.num_child_nodes() == 0 and not self.phylogeny.seed_node.is_extant:
+            self.total_extinction_exception("Death cycle (post-pruning): no extant lineages on tree")
+        if self.debug_mode:
+            try:
+                self.phylogeny._debug_check_tree()
+            except AttributeError:
+                self.phylogeny.debug_check_tree()
+            self.run_logger.debug("DEBUG MODE: phylogeny structure is valid after lineage pruning")
 
     def _debug_check_habitat_000(self):
         for nd in self.phylogeny:
@@ -691,209 +900,6 @@ class SupertrampSimulator(object):
                             nd.habitats))
                     print(self.phylogeny._as_newick_string())
                 assert str(nd.habitat_types) != "000"
-
-    def run_lineage_birth(self):
-        # - Each lineage in each habitat has an (independent) probability of
-        #   splitting given by the habitat-specific birth rate.
-        # - A particular lineage's probability of splitting in a particular
-        #   habitat is independent of the any other lineage splitting in
-        #   the same or any other habitat.
-        # - A particular lineage's probability of splitting in a particular
-        #   habitat is also independent of the *same* lineage going extinct
-        #   in any other habitat on any other island.
-        # - A particular lineage may speciate in multiple habitats
-        #   simultaneously in the same generation.
-        lineage_splitting_habitat_localities = collections.defaultdict(set)
-        lineage_habitats = collections.defaultdict(set)
-
-        # # ORIGINAL: same rate for all lineages
-        # for island in self.islands:
-        #     for habitat in island.habitat_list:
-        #         if not habitat.lineages:
-        #             continue
-        #         splitting_rate = self.diversification_model_s0 * (len(habitat.lineages) ** self.diversification_model_a)
-        #         for lineage in habitat.lineages:
-        #             assert lineage.is_extant
-        #             lineage_habitats[lineage].add(habitat)
-        #             if self.rng.uniform(0, 1) <= splitting_rate:
-        #                 lineage_splitting_habitat_localities[lineage].add(habitat)
-
-        # EXPERIMENTAL: rate dynamically-updated
-        for island in self.islands:
-            for habitat in island.habitat_list:
-                if not habitat.lineages:
-                    continue
-                pool = list(habitat.lineages)
-                richness = len(pool)
-                self.rng.shuffle(pool)
-                while pool:
-                    lineage = pool.pop()
-                    assert lineage.is_extant
-                    lineage_habitats[lineage].add(habitat)
-                    splitting_rate = self.diversification_model_s0 * (richness ** self.diversification_model_a)
-                    if self.rng.uniform(0, 1) <= splitting_rate:
-                        lineage_splitting_habitat_localities[lineage].add(habitat)
-                        richness += 1
-
-        if not lineage_habitats:
-            self.total_extinction_exception("Birth cycle (census): no lineages found in any habitat on any island")
-        for lineage in lineage_splitting_habitat_localities:
-            assert lineage.is_extant
-            splitting_habitats = lineage_splitting_habitat_localities[lineage]
-            if not self.sympatric_speciation and not self.single_island_mode:
-                if len(lineage_habitats[lineage]) == 1:
-                    # lineage occurs only in a habitat of only one island;
-                    # since sympatric speciation is disallowed: skipped
-                    continue
-                if len(lineage_habitats[lineage]) == len(splitting_habitats):
-                    # lineage in splitting in every island in which it occurs;
-                    # since sympatric speciation is disallowed: drop one
-                    splitting_habitats.remove(self.rng.choice(list(splitting_habitats)))
-            nsplits = len(splitting_habitats)
-            children = lineage.diversify(
-                    lineage_indexer=self.lineage_indexer,
-                    finalize_distribution_label=True,
-                    nsplits=nsplits)
-            self.run_logger.debug("{splitting_lineage} speciating in {num_islands} islands: {islands}".format(
-                splitting_lineage=lineage.logging_label,
-                num_islands=len(splitting_habitats),
-                islands=",".join([habitat.island.label for habitat in splitting_habitats]),
-                ))
-            assert len(children) == len(splitting_habitats) + 1
-            self.num_births += nsplits
-            if self.debug_mode:
-                try:
-                    self.phylogeny._debug_check_tree()
-                except AttributeError:
-                    self.phylogeny.debug_check_tree()
-                self.run_logger.debug("DEBUG MODE: phylogeny structure is valid")
-            c0 = children[0]
-            c_remaining = set(children[1:])
-            if len(self.habitat_types) > 1:
-                # assumes all children have the same habitat type
-                habitats_to_evolve_into = [ h for h in self.habitat_types if h is not c0.habitat_type ]
-                for c1 in c_remaining:
-                    if self.rng.uniform(0, 1) <= self.global_lineage_niche_evolution_probability:
-                        c1.habitat_type = self.rng.choice(habitats_to_evolve_into)
-            c0_placed = False
-            for habitat in lineage_habitats[lineage]:
-                habitat.remove_lineage(lineage)
-                if habitat in splitting_habitats:
-                    c1 = c_remaining.pop()
-                    habitat.island.add_lineage(lineage=c1, habitat_type=c1.habitat_type)
-                    self.run_logger.debug("{splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') speciating to {daughter_lineage1} (with habitat type '{daughter_lineage1_habitat_type}') in island {island}".format(
-                        splitting_lineage=lineage.logging_label,
-                        splitting_lineage_habitat_type=lineage.habitat_type.label,
-                        daughter_lineage0=c0.logging_label,
-                        daughter_lineage1=c1.logging_label,
-                        daughter_lineage1_habitat_type=c1.habitat_type.label,
-                        island=habitat.island.label,
-                        ))
-                    if self.sympatric_speciation or self.single_island_mode:
-                        habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
-                        c0_placed = True
-                        self.run_logger.debug("{splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') continuing as {daughter_lineage0} in island {island}".format(
-                            splitting_lineage=lineage.logging_label,
-                            splitting_lineage_habitat_type=lineage.habitat_type.label,
-                            daughter_lineage0=c0.logging_label,
-                            daughter_lineage1=c1.logging_label,
-                            daughter_lineage1_habitat_type=c1.habitat_type.label,
-                            island=habitat.island.label,
-                            ))
-                else:
-                    habitat.island.add_lineage(lineage=c0, habitat_type=c0.habitat_type)
-                    c0_placed = True
-                    self.run_logger.debug("{splitting_lineage} (with habitat type '{splitting_lineage_habitat_type}') continuing as {daughter_lineage0} in island {island}".format(
-                        splitting_lineage=lineage.logging_label,
-                        splitting_lineage_habitat_type=lineage.habitat_type.label,
-                        daughter_lineage0=c0.logging_label,
-                        island=habitat.island.label,
-                        ))
-            assert c0_placed
-            assert len(c_remaining) == 0
-
-    def run_lineage_death(self):
-        # - Each lineage in each habitat has an (independent) probability of
-        #   going locally extinct (i.e., extirpated from a particular
-        #   habitat) given by the local, habitat-specific death rate.
-        # - A particular lineage's probability of going extinct in a
-        #   particular habitat is independent of the any other lineage going
-        #   extinct in the same or any other habitat.
-        # - A particular lineage's probability of going extinct in a
-        #   particular habitat is also independent of the *same* lineage
-        #   going extinct in any other habitat on any other island.
-        # - A particular lineage may be extirpated from multiple habitats
-        #   simultaneously in the same generation.
-        # - Once a lineage is no longer present in any habitat across all
-        #   islands, it is considered to have gone globally-extinct and
-        #   removed from the system.
-        lineage_counts = collections.Counter()
-        for island in self.islands:
-            for habitat in island.habitat_list:
-                lineage_counts.update(habitat.lineages)
-                richness = len(habitat.lineages)
-                if richness <= 0:
-                    continue
-
-                # # ORIGINAL: same rate for all lineages
-                # death_rate = self.diversification_model_e0 * (richness ** self.diversification_model_b)
-                # to_remove = []
-                # for lineage in habitat.lineages:
-                #     assert lineage.is_extant
-                #     if self.rng.uniform(0, 1) <= death_rate:
-                #         to_remove.append(lineage)
-
-                # EXPERIMENTAL: rate dynamically-updated
-                to_remove = []
-                pool = list(habitat.lineages)
-                self.rng.shuffle(pool)
-                while pool:
-                    lineage = pool.pop()
-                    assert lineage.is_extant
-                    death_rate = self.diversification_model_e0 * (richness ** self.diversification_model_b)
-                    if self.rng.uniform(0, 1) <= death_rate:
-                        to_remove.append(lineage)
-                        richness -= 1
-
-                for lineage in to_remove:
-                    self.run_logger.debug("{lineage} extirpated from island {island}".format(
-                        lineage=lineage.logging_label,
-                        island=habitat.island.label,
-                        ))
-                    self.num_extirpations += 1
-                    habitat.remove_lineage(lineage)
-                    lineage_counts.subtract([lineage])
-
-
-        if not lineage_counts:
-            self.total_extinction_exception("Death cycle (census): no lineages found in any habitat on any island")
-        for lineage in lineage_counts:
-            count = lineage_counts[lineage]
-            if count == 0:
-                self.run_logger.debug("{lineage} extirpated from all islands and is now globally extinct".format(
-                    lineage=lineage.logging_label,
-                    ))
-                self.num_extinctions += 1
-                lineage.is_extant = False
-                if lineage is self.phylogeny.seed_node:
-                    self.total_extinction_exception("Death cycle (pruning): seed node has been extirpated from all habitats on all islands")
-                elif not self.track_extinct_lineages:
-                    self.phylogeny.prune_subtree(node=lineage,
-                            update_splits=False, delete_outdegree_one=True)
-                    if self.phylogeny.seed_node.num_child_nodes() == 0 and not self.phylogeny.seed_node.is_extant:
-                        self.total_extinction_exception("Death cycle (post-pruning): no extant lineages on tree")
-            elif self.debug_mode:
-                ## sanity checking ...
-                found = True
-                for island in self.islands:
-                    for habitat in island.habitat_list:
-                        if lineage in habitat.lineages:
-                            found = True
-                            break
-                    if found:
-                        break
-                assert found, lineage
-                self.run_logger.debug("DEBUG MODE: Lineage extinction book-keeping is OK")
 
     def report_trees(self):
         self.tree_log.write("[&R][simulation={},generation={}]".format(self.name, self.current_gen))
