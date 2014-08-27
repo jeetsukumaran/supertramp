@@ -56,9 +56,9 @@ def main():
             default=10,
             help="number of replicates (default = %(default)s).")
     run_options.add_argument("--log-frequency",
-            default=100,
+            default=None,
             type=int,
-            help="Frequency that background progress messages get written to the log (default = %(default)s).")
+            help="Frequency that background progress messages get written to the log.")
     run_options.add_argument("--file-logging-level",
             default="debug",
             help="Message level threshold for file logs.")
@@ -97,6 +97,11 @@ def main():
 
     argsd = vars(args)
     ngens = argsd.pop("ngens")
+    default_log_frequency = int(ngens/10)
+    if default_log_frequency < 1:
+        default_log_frequency = 10
+    if argsd["log_frequency"] is None:
+        argsd["log_frequency"] = default_log_frequency
     nreps = argsd.pop("nreps")
     random_seed = argsd.pop("random_seed", None)
     output_prefix = argsd.pop("output_prefix", "supertramp_run")
