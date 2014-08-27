@@ -719,9 +719,9 @@ class SupertrampSimulator(object):
             if not lineage.is_extant:
                 continue
             u = self.rng.uniform(0, 1)
-            if u <= self.diversification_model_death_rate:
+            if u < self.diversification_model_death_rate:
                 extincting_lineages.add(lineage)
-            elif u <= self.diversification_model_sum_of_birth_and_death_rate:
+            elif u < self.diversification_model_sum_of_birth_and_death_rate:
                 splitting_lineages.add(lineage)
             visited_lineages += 1
         if not visited_lineages:
