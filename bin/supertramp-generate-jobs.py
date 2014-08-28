@@ -73,6 +73,9 @@ def main():
     parser.add_argument("-q", "--queue",
             default="long",
             help="Name of queue to use (default: '%(default)s')")
+    parser.add_argument("--no-queue",
+            default=False,
+            help="Do not use any queue")
     # parser.add_argument("--ngens",
     #         type=int,
     #         default=1000000,
@@ -94,7 +97,7 @@ def main():
         source_venv = "source {}".format(venv_activate)
     else:
         source_venv = ""
-    if args.queue:
+    if not args.no_queue and args.queue:
         queue = "#$ -q {}".format(args.queue)
     else:
         queue = ""
