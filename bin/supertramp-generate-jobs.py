@@ -74,6 +74,7 @@ def main():
             default="long",
             help="Name of queue to use (default: '%(default)s')")
     parser.add_argument("--no-queue",
+            action="store_true",
             default=False,
             help="Do not use any queue")
     # parser.add_argument("--ngens",
