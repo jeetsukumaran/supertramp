@@ -85,19 +85,21 @@ class TreeProcessor(object):
                 if nd.is_leaf():
                     island_code = nd.taxon.island_code
                     for idx, i in enumerate(island_code):
-                        island_idx = len(island_code) - idx
+                        # island_idx = len(island_code) - idx
+                        island_idx = idx
                         if i == "1":
                             nodes_by_island[island_idx].append(nd)
                     habitat_code = nd.taxon.habitat_code
                     for idx, i in enumerate(habitat_code):
-                        habitat_idx = len(habitat_code) - idx
+                        # habitat_idx = len(habitat_code) - idx
+                        habitat_idx = idx
                         if i == "1":
                             nodes_by_habitat[habitat_idx].append(nd)
             pdm = treecalc.PatristicDistanceMatrix(tree=tree)
 
             tree.stats = collections.defaultdict(lambda:"NA")
             if params is not None:
-                tree.stats.update(params)
+                tree.params = params.copy()
             tree.stats["size"] = num_tips
             tree.stats["length"] = total_length
 
@@ -174,7 +176,9 @@ class TreeProcessor(object):
             stats_fields.update(tree.stats.keys())
 
             if summaries is not None:
-                summaries.append(tree.stats.copy())
+                sss = tree.stats.copy()
+                sss.update(tree.params)
+                summaries.append(sss)
 
         if trees_outf is not None:
             try:
