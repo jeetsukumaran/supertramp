@@ -22,14 +22,46 @@ def main():
     Assumptions
     -----------
 
-    1 simulation generation = 100 years
-    10000 simulation generations = 1e6 years
-    Simulation run-time:        1000000 generations    = 1e8 years
-    High speciation rate:       0.001   per generation = 0.1 per MY
-    Med speciation rate:        0.0001  per generation = 0.01 per MY
-    Low speciation rate:        0.00001 per generation = 0.001 per MY
-    Dispersal rate:             0.01, 0.5, 1.0, 2.0, 10.0 x speciation rates
-    Niche evolution prob:       0.001, 0.01, 0.10, 1.0
+    Previously:
+
+        1 simulation generation = 100 years
+        10000 simulation generations = 1e6 years
+        Simulation run-time:        1000000 generations    = 1e8 years
+        High speciation rate:       0.001   per generation = 0.1 per MY
+        Med speciation rate:        0.0001  per generation = 0.01 per MY
+        Low speciation rate:        0.00001 per generation = 0.001 per MY
+        Dispersal rate:             0.01, 0.5, 1.0, 2.0, 10.0 x speciation rates
+        Niche evolution prob:       0.001, 0.01, 0.10, 1.0
+
+    2014-08-27:
+
+        Oceania
+
+            Number of islands                               6
+
+            Diversification Rate (APE)
+                For Oceania with root age of 1.0            2.733492
+
+            Extinction Rate (Lagrange)
+                For Oceania with root age of 1.0            5.054e-07
+                For Oceania with root age of 100000         1.741e-13
+
+            Dispersal Rate (Lagrange)
+                For Oceania with root age of 1.0            0.3255
+                For Oceania with root age of 100000         4.446e-06
+
+            Simulation Settings
+                Running for 100000 generations
+                    Extinction rate:                            0
+                    Birth rate:                                 2.73 / 100000 = 2.73e-5
+                    Dispersal rate:                             0.33 / 100000 = 3.3e-6
+                    Niche evolution rate:                       = dispersal rate
+
+        Continental
+
+                For Continental with root age of 1.0,       2.8263
+
+
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("--venv",
@@ -78,38 +110,30 @@ def main():
     # niche_evolution_probs = [0.001, 0.01, 0.10, 1.0]
 
     # Expected equilibirum species richness, per habitat (per island): 10(30), 20(60), 40(120)
-    diversification_model_s0e0 = [
-            (1e-1, 1e-2),
-            (1e-1, 1e-3),
-            (1e-2, 1e-3),
-            (1e-2, 1e-4),
-            (1e-4, 1e-5),
-            (1e-4, 1e-6),
-            (1e-6, 1e-7),
-            (1e-6, 1e-8),
-            ]
-    dispersal_rates = [1e-6, 1e-4, 1e-2]
-    niche_evolution_probs = [1e-3, 1e-1, 1]
+    birth_death_rates = [(2.73e-5,0.0), ]
+    dispersal_rates = [3.3e-6,]
+    niche_evolution_probs = [3.3e-6,]
     run_manifest = {}
-    for ngens in (int(x) for x in (1e4, 1e6)):
+    for ngens in (int(x) for x in (1e5,)):
         for dm_idx, dispersal_model in enumerate(dispersal_models):
-            for br_idx, (s0,e0) in enumerate(diversification_model_s0e0):
+            for bd_idx, (birth_rate, death_rate) in enumerate(birth_death_rates):
                 for drf_idx, dispersal_rate in enumerate(dispersal_rates):
                     for nef_idx, niche_evolution_prob in enumerate(niche_evolution_probs):
-                        stem = "{dispersal_model}_s{s0:10.8f}_e{e0:10.8f}_r{dispersal_rate:10.8f}_n{niche_evolution_prob:10.8f}".format(
+                        stem = "{dispersal_model}_b{birth_rate:10.8f}_d{death_rate:10.8f}_r{dispersal_rate:10.8f}_n{niche_evolution_prob:10.8f}".format(
                                 dispersal_model=dispersal_model,
-                                s0=s0,
-                                e0=e0,
+                                birth_rate=birth_rate,
+                                death_rate=death_rate,
                                 dispersal_rate=dispersal_rate,
                                 niche_evolution_prob=niche_evolution_prob)
                         output_prefix = stem
                         run_cmd = []
                         run_cmd.append(supertramp_path)
                         run_cmd.extend(["-z", str(rng.randint(0, sys.maxsize))])
+                        run_cmd.extend(["--num-islands", str(6)])
+                        run_cmd.extend(["--num-habitat-types", str(2)])
                         run_cmd.extend(["--nreps", str(args.nreps)])
-                        run_cmd.extend(["--log-frequency", "10000"])
-                        run_cmd.extend(["-s", str(s0)])
-                        run_cmd.extend(["-e", str(e0)])
+                        run_cmd.extend(["-b", str(birth_rate)])
+                        run_cmd.extend(["-d", str(death_rate)])
                         run_cmd.extend(["--niche-evolution-probability", str(niche_evolution_prob)])
                         run_cmd.extend(["--dispersal-rate", str(dispersal_rate)])
                         run_cmd.extend(["--ngens", str(ngens)])
@@ -129,8 +153,8 @@ def main():
                                 ))
                         run_manifest[output_prefix] = {
                                 "dispersal_model"       : dispersal_model,
-                                "s0"                    : s0,
-                                "e0"                    : e0,
+                                "birth_rate"            : birth_rate,
+                                "death_rate"            : death_rate,
                                 "dispersal_rate"        : dispersal_rate,
                                 "niche_evolution_prob"  : niche_evolution_prob,
                                 "ngens"                 : ngens,
