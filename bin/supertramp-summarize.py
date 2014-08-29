@@ -22,6 +22,7 @@ def main():
             help="Output directory root (default: '%(default)s').")
     args = parser.parse_args()
     args.quiet = False
+    args.group_processed_trees_by_model = False
 
     tree_processor = summarize.TreeProcessor()
     param_keys = collections.OrderedDict()
@@ -65,7 +66,14 @@ def main():
                     summaries=summaries)
             stats_fields.update(sub_stats_fields)
             for color_scheme in ("by-island", "by-habitat"):
-                colorized_trees_filepath = os.path.join(output_dir, "{}.processed.{}.trees".format(job, color_scheme))
+                if args.group_processed_trees_by_model:
+                    out_fname = job
+                else:
+                    parts = job.split("_", 1)
+                    assert len(parts) == 2
+                    model_name = parts[0]
+                    out_fname = parts[1]
+                colorized_trees_filepath = os.path.join(output_dir, "{}.processed.{}.{}.trees".format(out_fname, color_scheme, model_name))
                 with open(colorized_trees_filepath, "w") as trees_outf:
                     tree_processor.write_colorized_trees(trees_outf, trees, color_scheme)
 
