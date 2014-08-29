@@ -3,30 +3,64 @@
 import collections
 import dendropy
 from dendropy import treecalc
+from supertramp import BitVector
 
 if dendropy.__version__.startswith("4"):
     _get_taxa = lambda x: x.taxon_namespace
 else:
     _get_taxa = lambda x: x.taxon_set
 
+class ColorAssigner(object):
+
+    def __init__(self, offset=0):
+        self.assigned_colors = {}
+        self.offset = offset
+        self.COLORS = (
+            "ff0000", "00ff00", "0000ff", "ffff00", "ff00ff", "00ffff", "000000",
+            "800000", "008000", "000080", "808000", "800080", "008080", "808080",
+            "c00000", "00c000", "0000c0", "c0c000", "c000c0", "00c0c0", "c0c0c0",
+            "400000", "004000", "000040", "404000", "400040", "004040", "404040",
+            "200000", "002000", "000020", "202000", "200020", "002020", "202020",
+            "600000", "006000", "000060", "606000", "600060", "006060", "606060",
+            "a00000", "00a000", "0000a0", "a0a000", "a000a0", "00a0a0", "a0a0a0",
+            "e00000", "00e000", "0000e0", "e0e000", "e000e0", "00e0e0", "e0e0e0",
+            )
+
+    def __getitem__(self, code):
+        try:
+            return self.assigned_colors[code]
+        except KeyError:
+            on_bits = []
+            for idx, i in enumerate(code):
+                if i == "1":
+                    on_bits.append(idx)
+            if len(on_bits) > 1:
+                self.assigned_colors[code] = "#666666"
+            else:
+                self.assigned_colors[code] = "#{}".format(self.COLORS[on_bits[0]+self.offset])
+            return self.assigned_colors[code]
+
 class TreeProcessor(object):
 
     def __init__(self):
 
-        self.island_colors = collections.defaultdict(lambda: "#666666")
-        self.island_colors.update({
-                "000001" : "#ff0000",
-                "000010" : "#00cc00",
-                "000100" : "#0000ff",
-                "001000" : "#cccc00",
-                "010000" : "#cccc00",
-                "100000" : "#cccc00",
-                })
-        self.habitat_colors = {}
-        self.habitat_colors.update({
-                "01" : "#ff00ff",
-                "10" : "#00ffff",
-                })
+        # self.island_colors = collections.defaultdict(lambda: "#666666")
+        # self.island_colors.update({
+        #         "000001" : "#ff0000",
+        #         "000010" : "#00cc00",
+        #         "000100" : "#0000ff",
+        #         "001000" : "#cccc00",
+        #         "010000" : "#cccc00",
+        #         "100000" : "#cccc00",
+        #         })
+        # self.habitat_colors = {}
+        # self.habitat_colors.update({
+        #         "01" : "#ff00ff",
+        #         "10" : "#00ffff",
+        #         })
+        self.island_colors = ColorAssigner()
+        self.habitat_colors = ColorAssigner()
+        self.drop_stunted_trees = True
 
     def colorize_trees(self, trees, outf=None):
         self.encode_taxa(_get_taxa(trees))
@@ -66,7 +100,10 @@ class TreeProcessor(object):
             summaries=None):
         self.encode_taxa(_get_taxa(trees))
         stats_fields = set()
-        for tree in trees:
+        for tree in list(trees):
+            if self.drop_stunted_trees and tree.seed_node.num_child_nodes() <= 1:
+                trees.remove(tree)
+                continue
             num_tips = 0
             total_length = 0.0
             nodes_by_island = collections.defaultdict(list)
@@ -194,12 +231,13 @@ class TreeProcessor(object):
         if annotate_island_color and annotate_habitat_color:
             raise TypeError("Cannot simultaneously annotate island and habitat color")
         label_parts = t.label.split(".")
+        # t.island_code = BitVector.BitVector(bitstring=label_parts[1])
         t.island_code = label_parts[1]
         t.island_color = self.island_colors[t.island_code]
         if annotate_island_color and t.island_color is not None:
             t.annotations.add_new("!color", t.island_color)
         t.habitat_code = label_parts[2]
-        t.habitat_color = self.habitat_colors.get(t.habitat_code, None)
+        t.habitat_color = self.habitat_colors[t.habitat_code]
         if annotate_habitat_color and t.habitat_color is not None:
             t.annotations.add_new("!color", t.habitat_color)
 
@@ -223,7 +261,8 @@ class TreeProcessor(object):
         parts.append("END;")
         parts.append("BEGIN TREES;")
         for tree_idx, tree in enumerate(trees):
-            parts.append("    TREE T{} = [&R] {};".format(tree_idx, tree._as_newick_string()))
+            if len(tree.child_nodes() >= 2):
+                parts.append("    TREE T{} = [&R] {};".format(tree_idx, tree._as_newick_string()))
         parts.append("END;")
         outf.write("\n".join(parts))
 
