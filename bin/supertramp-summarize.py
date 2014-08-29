@@ -59,14 +59,16 @@ def main():
             trees = dendropy.TreeList.get_from_path(
                     tree_filepath,
                     "newick")
-            colorized_trees_filepath = os.path.join(output_dir, "{}.processed.trees".format(job))
-            with open(colorized_trees_filepath, "w") as trees_outf:
-                summary_stat, sub_stats_fields = tree_processor.process_trees(
-                        trees,
-                        trees_outf=trees_outf,
-                        params=params,
-                        summaries=summaries)
-                stats_fields.update(sub_stats_fields)
+            summary_stat, sub_stats_fields = tree_processor.process_trees(
+                    trees,
+                    params=params,
+                    summaries=summaries)
+            stats_fields.update(sub_stats_fields)
+            for color_scheme in ("by-island", "by-habitat"):
+                colorized_trees_filepath = os.path.join(output_dir, "{}.processed.{}.trees".format(job, color_scheme))
+                with open(colorized_trees_filepath, "w") as trees_outf:
+                    tree_processor.write_colorized_trees(trees_outf, trees, color_scheme)
+
     param_fields = list(param_keys.keys())
     stats_fields = sorted(list(stats_fields))
     all_fields = param_fields + stats_fields

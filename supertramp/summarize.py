@@ -12,19 +12,24 @@ else:
 
 class ColorAssigner(object):
 
+    COLORS = (
+        "#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff", "#000000",
+        "#800000", "#008000", "#000080", "#808000", "#800080", "#008080", "#808080",
+        "#c00000", "#00c000", "#0000c0", "#c0c000", "#c000c0", "#00c0c0", "#c0c0c0",
+        "#400000", "#004000", "#000040", "#404000", "#400040", "#004040", "#404040",
+        "#200000", "#002000", "#000020", "#202000", "#200020", "#002020", "#202020",
+        "#600000", "#006000", "#000060", "#606000", "#600060", "#006060", "#606060",
+        "#a00000", "#00a000", "#0000a0", "#a0a000", "#a000a0", "#00a0a0", "#a0a0a0",
+        "#e00000", "#00e000", "#0000e0", "#e0e000", "#e000e0", "#00e0e0", "#e0e0e0",
+        "#666666",
+        )
+    COLOR_INDEXES = {}
+    for idx, c in enumerate(COLORS):
+        COLOR_INDEXES[c] = idx
+
     def __init__(self, offset=0):
         self.assigned_colors = {}
         self.offset = offset
-        self.COLORS = (
-            "ff0000", "00ff00", "0000ff", "ffff00", "ff00ff", "00ffff", "000000",
-            "800000", "008000", "000080", "808000", "800080", "008080", "808080",
-            "c00000", "00c000", "0000c0", "c0c000", "c000c0", "00c0c0", "c0c0c0",
-            "400000", "004000", "000040", "404000", "400040", "004040", "404040",
-            "200000", "002000", "000020", "202000", "200020", "002020", "202020",
-            "600000", "006000", "000060", "606000", "600060", "006060", "606060",
-            "a00000", "00a000", "0000a0", "a0a000", "a000a0", "00a0a0", "a0a0a0",
-            "e00000", "00e000", "0000e0", "e0e000", "e000e0", "00e0e0", "e0e0e0",
-            )
 
     def __getitem__(self, code):
         try:
@@ -37,7 +42,7 @@ class ColorAssigner(object):
             if len(on_bits) > 1:
                 self.assigned_colors[code] = "#666666"
             else:
-                self.assigned_colors[code] = "#{}".format(self.COLORS[on_bits[0]+self.offset])
+                self.assigned_colors[code] = self.COLORS[on_bits[0]+self.offset]
             return self.assigned_colors[code]
 
 class TreeProcessor(object):
@@ -62,21 +67,26 @@ class TreeProcessor(object):
         self.habitat_colors = ColorAssigner()
         self.drop_stunted_trees = True
 
-    def colorize_trees(self, trees, outf=None):
-        self.encode_taxa(_get_taxa(trees))
-        for tree in trees:
-            for nd in tree:
-                if nd.taxon is None and nd.label is None:
-                    continue
-                if nd.taxon and nd.taxon.habitat_color is not None:
-                    nd.annotations.add_new("!color", nd.taxon.habitat_color)
-                elif nd.label is not None:
-                    self.encode_labeled_item(nd, annotate_habitat_color=True)
-        if outf is not None:
-            try:
-                trees.write_to_stream(outf, "nexus")
-            except AttributeError:
-                self.write_nexus(trees, outf)
+    def write_colorized_trees(self, outf, trees, scheme):
+        if scheme == "by-island":
+            taxon_color_attr = "island_color"
+            branch_color_attr = "habitat_color"
+        elif scheme == "by-habitat":
+            taxon_color_attr = "habitat_color"
+            branch_color_attr = "island_color"
+        else:
+            raise ValueError("Unrecognized scheme: {}".format(scheem))
+        taxa = _get_taxa(trees)
+        self.encode_taxa(taxa)
+        for taxon in taxa:
+            taxon.annotations["!color"] = getattr(taxon, taxon_color_attr)
+        # for tree in trees:
+        #     for nd in tree:
+        #         if nd.label is None:
+        #             continue
+        #         self.encode_labeled_item(nd)
+        #         nd.annotations["!color"] = getattr(nd, branch_color_attr)
+        trees.write_to_stream(outf, "nexus")
 
     def get_mean_patristic_distance(self, pdm, nodes):
         if len(nodes) == 1:
@@ -112,10 +122,8 @@ class TreeProcessor(object):
                 # colorize
                 if nd.taxon is None and nd.label is None:
                     continue
-                if nd.taxon and nd.taxon.habitat_color is not None:
-                    nd.annotations.add_new("!color", nd.taxon.habitat_color)
-                elif nd.label is not None:
-                    self.encode_labeled_item(nd, annotate_habitat_color=True)
+                if nd.label is not None:
+                    self.encode_labeled_item(nd)
                 # stats
                 num_tips += 1
                 total_length += nd.edge.length
@@ -224,45 +232,21 @@ class TreeProcessor(object):
                 self.write_nexus(trees, trees_outf)
         return trees, stats_fields
 
-    def encode_labeled_item(self,
-            t,
-            annotate_island_color=False,
-            annotate_habitat_color=False):
-        if annotate_island_color and annotate_habitat_color:
-            raise TypeError("Cannot simultaneously annotate island and habitat color")
+    def encode_labeled_item(self, t):
+        if hasattr(t, "is_encoded") and t.is_encoded:
+            return
         label_parts = t.label.split(".")
-        # t.island_code = BitVector.BitVector(bitstring=label_parts[1])
         t.island_code = label_parts[1]
         t.island_color = self.island_colors[t.island_code]
-        if annotate_island_color and t.island_color is not None:
-            t.annotations.add_new("!color", t.island_color)
         t.habitat_code = label_parts[2]
         t.habitat_color = self.habitat_colors[t.habitat_code]
-        if annotate_habitat_color and t.habitat_color is not None:
-            t.annotations.add_new("!color", t.habitat_color)
+        t.is_encoded = True
 
     def encode_taxa(self, taxa):
+        if hasattr(taxa, "is_encoded") and taxa.is_encoded:
+            return
         for t in taxa:
-            self.encode_labeled_item(t, annotate_island_color=True)
+            self.encode_labeled_item(t)
+        taxa.is_encoded = True
 
-    def write_nexus(self, trees, outf):
-        parts = []
-        parts.append("#NEXUS\n")
-        parts.append("BEGIN TAXA;")
-        parts.append("    DIMENSIONS NTAX={};".format(len(_get_taxa(trees))))
-        parts.append("    TAXLABELS")
-        for t in _get_taxa(trees):
-            if t.island_color is None:
-                color = ""
-            else:
-                color = "[&!color={}]".format(t.island_color)
-            parts.append("        '{}'{}".format(t.label, color))
-        parts.append("    ;")
-        parts.append("END;")
-        parts.append("BEGIN TREES;")
-        for tree_idx, tree in enumerate(trees):
-            if len(tree.child_nodes() >= 2):
-                parts.append("    TREE T{} = [&R] {};".format(tree_idx, tree._as_newick_string()))
-        parts.append("END;")
-        outf.write("\n".join(parts))
 
