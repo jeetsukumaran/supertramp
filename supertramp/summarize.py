@@ -2,7 +2,8 @@
 
 import collections
 import dendropy
-from dendropy import treecalc
+from dendropy.calculate import treestat
+from dendropy.model import birthdeath
 from supertramp import BitVector
 
 if dendropy.__version__.startswith("4"):
@@ -89,8 +90,8 @@ class TreeProcessor(object):
         trees.write_to_stream(outf, "nexus")
 
     def get_mean_patristic_distance(self, pdm, nodes):
-        if len(nodes) == 1:
-            return None, None
+        if len(nodes) <= 1:
+            return "NA", "NA"
         weighted_dist = 0.0
         unweighted_dist = 0.0
         ncomps = 0
@@ -118,6 +119,10 @@ class TreeProcessor(object):
             total_length = 0.0
             nodes_by_island = collections.defaultdict(list)
             nodes_by_habitat = collections.defaultdict(list)
+            disturbed_habitat_nodes = []
+            interior_habitat_nodes = []
+
+            all_tips = []
             for nd in tree:
                 # colorize
                 if nd.taxon is None and nd.label is None:
@@ -128,6 +133,7 @@ class TreeProcessor(object):
                 num_tips += 1
                 total_length += nd.edge.length
                 if nd.is_leaf():
+                    all_tips.append(nd)
                     island_code = nd.taxon.island_code
                     for idx, i in enumerate(island_code):
                         # island_idx = len(island_code) - idx
@@ -140,83 +146,34 @@ class TreeProcessor(object):
                         habitat_idx = idx
                         if i == "1":
                             nodes_by_habitat[habitat_idx].append(nd)
-            pdm = treecalc.PatristicDistanceMatrix(tree=tree)
+                            if habitat_idx == 0:
+                                disturbed_habitat_nodes.append(nd)
+                            else:
+                                interior_habitat_nodes.append(nd)
 
+            pdm = treestat.PatristicDistanceMatrix(tree=tree)
             tree.stats = collections.defaultdict(lambda:"NA")
             if params is not None:
                 tree.params = params.copy()
             tree.stats["size"] = num_tips
             tree.stats["length"] = total_length
+            # node_ages = tree.internal_node_ages()
+            # node_ages = [n/total_length for n in node_ages]
+            # tree.stats["est.birth.rate"] = birthdeath.fit_pure_birth_model(internal_node_ages=node_ages)["birth_rate"]
+            tree.stats["est.birth.rate"] = birthdeath.fit_pure_birth_model(tree=tree)["birth_rate"]
 
-            weighted_habitat_dist_total = 0.0
-            weighted_habitat_dist_count = 0
-            unweighted_habitat_dist_total = 0.0
-            unweighted_habitat_dist_count = 0
-            habitat_keys = sorted(nodes_by_habitat.keys())
-            for habitat_key in habitat_keys:
-                weighted_habitat_dist_key = "habitat.{}.pdist.weighted".format(habitat_key)
-                unweighted_habitat_dist_key = "habitat.{}.pdist.unweighted".format(habitat_key)
-                weighted, unweighted = self.get_mean_patristic_distance(pdm, nodes_by_habitat[habitat_key])
-                if weighted is None:
-                    assert unweighted is None
-                    tree.stats[weighted_habitat_dist_key] = "NA"
-                else:
-                    weighted = weighted/total_length
-                    weighted_habitat_dist_total += weighted
-                    tree.stats[weighted_habitat_dist_key] = weighted
-                    weighted_habitat_dist_count += 1
-                if unweighted is None:
-                    assert weighted is None
-                    tree.stats[unweighted_habitat_dist_key] = "NA"
-                else:
-                    unweighted = unweighted/num_tips
-                    unweighted_habitat_dist_total += unweighted
-                    tree.stats[unweighted_habitat_dist_key] = weighted
-                    unweighted_habitat_dist_count += 1
-            assert weighted_habitat_dist_count == unweighted_habitat_dist_count
+            weighted_disturbed, unweighted_disturbed = self.get_mean_patristic_distance(pdm, disturbed_habitat_nodes)
+            weighted_interior, unweighted_interior = self.get_mean_patristic_distance(pdm, interior_habitat_nodes)
+            tree.stats["weighted.disturbed.habitat.pd"] = weighted_disturbed
+            tree.stats["unweighted.disturbed.habitat.pd"] = unweighted_disturbed
+            tree.stats["weighted.interior.habitat.pd"] = weighted_interior
+            tree.stats["unweighted.interior.habitat.pd"] = unweighted_interior
             try:
-                tree.stats["habitat.mean.pdist.weighted"] = weighted_habitat_dist_total / weighted_habitat_dist_count
-            except ZeroDivisionError:
-                tree.stats["habitat.mean.pdist.weighted"] = "NA"
-            try:
-                tree.stats["habitat.mean.pdist.unweighted"] = unweighted_habitat_dist_total / unweighted_habitat_dist_count
-            except ZeroDivisionError:
-                tree.stats["habitat.mean.pdist.unweighted"] = "NA"
-
-            weighted_island_dist_total = 0.0
-            weighted_island_dist_count = 0
-            unweighted_island_dist_total = 0.0
-            unweighted_island_dist_count = 0
-            island_keys = sorted(nodes_by_island.keys())
-            for island_key in island_keys:
-                weighted_island_dist_key = "island.{}.pdist.weighted".format(island_key)
-                unweighted_island_dist_key = "island.{}.pdist.unweighted".format(island_key)
-                weighted, unweighted = self.get_mean_patristic_distance(pdm, nodes_by_island[island_key])
-                if weighted is None:
-                    assert unweighted is None
-                    tree.stats[weighted_island_dist_key] = "NA"
-                else:
-                    weighted = weighted/total_length
-                    weighted_island_dist_total += weighted
-                    tree.stats[weighted_island_dist_key] = weighted
-                    weighted_island_dist_count += 1
-                if unweighted is None:
-                    assert weighted is None
-                    tree.stats[unweighted_island_dist_key] = "NA"
-                else:
-                    unweighted = unweighted/num_tips
-                    unweighted_island_dist_total += unweighted
-                    tree.stats[unweighted_island_dist_key] = weighted
-                    unweighted_island_dist_count += 1
-            assert weighted_island_dist_count == unweighted_island_dist_count
-            try:
-                tree.stats["island.mean.pdist.weighted"] = weighted_island_dist_total / weighted_island_dist_count
-            except ZeroDivisionError:
-                tree.stats["island.mean.pdist.weighted"] = "NA"
-            try:
-                tree.stats["island.mean.pdist.unweighted"] = unweighted_island_dist_total / unweighted_island_dist_count
-            except ZeroDivisionError:
-                tree.stats["island.mean.pdist.unweighted"] = "NA"
+                tree.stats["weighted.disturbed.to.interior.habitat.pd"] = weighted_disturbed/weighted_interior
+                tree.stats["unweighted.disturbed.to.interior.habitat.pd"] = unweighted_disturbed/unweighted_interior
+            except (ZeroDivisionError, TypeError):
+                tree.stats["weighted.disturbed.to.interior.habitat.pd"] = "NA"
+                tree.stats["unweighted.disturbed.to.interior.habitat.pd"] = "NA"
 
             stats_fields.update(tree.stats.keys())
 
