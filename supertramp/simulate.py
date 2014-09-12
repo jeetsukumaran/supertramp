@@ -372,38 +372,22 @@ class SupertrampSimulator(object):
                 type=float,
                 default=0.01,
                 help="diversfication model birth rate (default: %(default)s).")
-        model_diversification_submodel_params.add_argument("-d", "--diversification-model-death-rate",
+        model_diversification_submodel_params.add_argument("-e", "--diversification-model-death-rate",
                 type=float,
                 default=0.01,
-                help="'b' parameter of the diversfication model (default: %(default)s).")
-        # model_diversification_submodel_params.add_argument("-a", "--diversification-model-a",
-        #         type=float,
-        #         default=-0.5,
-        #         help="'a' parameter of the diversfication model (default: %(default)s).")
-        # model_diversification_submodel_params.add_argument("-b", "--diversification-model-b",
-        #         type=float,
-        #         default=0.5,
-        #         help="'b' parameter of the diversfication model (default: %(default)s).")
-        # model_diversification_submodel_params.add_argument("-s", "--diversification-model-s0", "--s0",
-        #         type=float,
-        #         default=0.001,
-        #         help="'s' parameter of the diversfication model (default: %(default)s).")
-        # model_diversification_submodel_params.add_argument("-e", "--diversification-model-e0", "--e0",
-        #         type=float,
-        #         default=0.0001,
-        #         help="'e' parameter of the diversfication model (default: %(default)s).")
+                help="diversification model extirpation rate (default: %(default)s).")
         model_dispersal_submodel_params = parser.add_argument_group("MODEL: Dispersal Submodel Parameters")
         model_dispersal_submodel_params.add_argument("-m", "--dispersal-model",
                 type=str,
                 default="unconstrained",
                 choices=["constrained", "unconstrained"],
                 help="Dispersal model: constrained or unconstrained by habitat")
-        model_dispersal_submodel_params.add_argument("-D", "--dispersal-rate",
+        model_dispersal_submodel_params.add_argument("-d", "--dispersal-rate",
                 default=0.01,
                 type=float,
                 help="Dispersal rate (default = %(default)s).")
         lineage_evolution_submodel_params = parser.add_argument_group("MODEL: Lineage Evolution Submodel Parameters")
-        lineage_evolution_submodel_params.add_argument("-y", "--niche-evolution-probability",
+        lineage_evolution_submodel_params.add_argument("-q", "--niche-evolution-probability",
                 default=0.01,
                 type=float,
                 help="Lineage (post-splitting) niche evolution probability (default = %(default)s).")
@@ -700,7 +684,7 @@ class SupertrampSimulator(object):
         if self.report_frequency is not None and self.report_frequency > 0 and self.current_gen % self.report_frequency == 0:
             self.report()
 
-    def run_diversification(self, global_lineage_death=True):
+    def run_diversification(self, global_lineage_death=False):
         """
         Parameters
         ----------
