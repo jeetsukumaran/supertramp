@@ -612,7 +612,13 @@ class SupertrampSimulator(object):
                 self.run_logger.info("Only {} island: forcing dispersal rate to 0.0".format(len(self.islands)))
             island_dispersal_rate = 0
         else:
-            island_dispersal_rate = float(self.global_dispersal_rate) / ((len(self.islands) * (len(self.islands) - 1)))
+            # Orignally, supertramp "distributed" the global dispersal rate
+            # over all islands, so that the *sum* of dispersal rates equalled the global dispersal rate
+            # island_dispersal_rate = float(self.global_dispersal_rate) / ((len(self.islands) * (len(self.islands) - 1)))
+
+            # Following lagrange and BioGeoBears, though, we now have the island dispersal rate being the global dispersal rate
+            island_dispersal_rate = self.global_dispersal_rate
+
         habitat_dispersal_rates = {}
         for idx, habitat_type in enumerate(self.habitat_types):
             if habitat_type in self.dispersal_source_habitat_types:
@@ -620,20 +626,29 @@ class SupertrampSimulator(object):
             else:
                 disp_rate = 0.0
             habitat_dispersal_rates[habitat_type] = disp_rate
+        island_dispersal_rates = {}
         for isl1 in self.islands:
+            dispersal_rates_out_of_isl1 = []
             for isl2 in self.islands:
                 if isl1 is not isl2:
                     for habitat_type in self.habitat_types:
+                        dispersal_rates_out_of_isl1.append(disp_rate)
                         disp_rate = habitat_dispersal_rates[habitat_type]
                         isl1.set_dispersal_rate(habitat_type, isl2, disp_rate)
                         self.run_logger.info("Island {} to {} dispersal rate for habitat {} = {}".format(
                             isl1, isl2, habitat_type, disp_rate))
                         dispersal_rates.append(disp_rate)
+            island_dispersal_rates[isl1] = sum(dispersal_rates_out_of_isl1)
+            self.run_logger.info("Total dispersal rate out of island {} = {}".format(isl1, island_dispersal_rates[isl1]))
         total_dispersal_rate = sum(dispersal_rates)
-        if len(self.islands) > 1 and abs(total_dispersal_rate - self.global_dispersal_rate) > 1e-8:
-            self.run_logger.critical("Error in dispersal rate distribution: {} != {}: {}".format(
-                total_dispersal_rate, self.global_dispersal_rate, dispersal_rates))
-            sys.exit(1)
+        self.run_logger.info("Sum of dispersal rates between all habitats = {}".format(total_dispersal_rate))
+        total_island_dispersal_rate = sum(island_dispersal_rates.values())
+        self.run_logger.info("Sum of dispersal rates between islands = {}".format(total_island_dispersal_rate))
+        self.run_logger.info("Mean dispersal rate per island = {}".format(total_island_dispersal_rate/len(island_dispersal_rates)))
+        # if len(self.islands) > 1 and abs(total_dispersal_rate - self.global_dispersal_rate) > 1e-8:
+        #     self.run_logger.critical("Error in dispersal rate distribution: {} != {}: {}".format(
+        #         total_dispersal_rate, self.global_dispersal_rate, dispersal_rates))
+        #     sys.exit(1)
 
         # initialize lineages
         self.seed_habitat = self.dispersal_source_habitat_types[0]
