@@ -368,11 +368,11 @@ class SupertrampSimulator(object):
                 default=3,
                 help="number of habitat types per island (default = %(default)s).")
         model_diversification_submodel_params = parser.add_argument_group("MODEL: Diversification Submodel Parameters")
-        model_diversification_submodel_params.add_argument("-b", "--diversification-model-birth-rate",
+        model_diversification_submodel_params.add_argument("-b", "--diversification-model-speciation-rate",
                 type=float,
                 default=0.01,
-                help="diversfication model birth rate (default: %(default)s).")
-        model_diversification_submodel_params.add_argument("-e", "--diversification-model-death-rate",
+                help="diversfication model speciation rate (default: %(default)s).")
+        model_diversification_submodel_params.add_argument("-e", "--diversification-model-extinction-rate",
                 type=float,
                 default=0.01,
                 help="diversification model extirpation rate (default: %(default)s).")
@@ -407,7 +407,7 @@ class SupertrampSimulator(object):
         self.phylogeny = None
 
         # system globals: metrics
-        self.num_births = 0
+        self.num_speciations = 0
         # self.num_extirpations = 0
         self.num_extinctions = 0
         self.num_niche_shifts = 0
@@ -479,15 +479,15 @@ class SupertrampSimulator(object):
         self.run_logger.info("Dispersal rate, d: {}".format(self.global_dispersal_rate))
 
         # Diversification submodel
-        self.diversification_model_birth_rate = model_params_d.pop("diversification_model_birth_rate", 0.01)
-        self.run_logger.info("Diversification model, birth-rate: {}".format(self.diversification_model_birth_rate))
-        self.diversification_model_death_rate = model_params_d.pop("diversification_model_death_rate", 0.01)
-        self.run_logger.info("Diversification model, death-rate: {}".format(self.diversification_model_death_rate))
-        self.diversification_model_sum_of_birth_and_death_rate = self.diversification_model_birth_rate + self.diversification_model_death_rate
+        self.diversification_model_speciation_rate = model_params_d.pop("diversification_model_speciation_rate", 0.01)
+        self.run_logger.info("Diversification model, speciation-rate: {}".format(self.diversification_model_speciation_rate))
+        self.diversification_model_extinction_rate = model_params_d.pop("diversification_model_extinction_rate", 0.01)
+        self.run_logger.info("Diversification model, extinction-rate: {}".format(self.diversification_model_extinction_rate))
+        self.diversification_model_sum_of_speciation_and_extinction_rate = self.diversification_model_speciation_rate + self.diversification_model_extinction_rate
 
         # Not strictly necessary in theory, but current implementation behaves
         # better if this true
-        assert self.diversification_model_sum_of_birth_and_death_rate <= 1.0
+        assert self.diversification_model_sum_of_speciation_and_extinction_rate <= 1.0
 
         # self.diversification_model_a = model_params_d.pop("diversification_model_a", -0.5)
         # self.run_logger.info("Diversification model, a: {}".format(self.diversification_model_a))
@@ -703,9 +703,9 @@ class SupertrampSimulator(object):
             if not lineage.is_extant:
                 continue
             u = self.rng.uniform(0, 1)
-            if u < self.diversification_model_death_rate:
+            if u < self.diversification_model_extinction_rate:
                 extincting_lineages.add(lineage)
-            elif u < self.diversification_model_sum_of_birth_and_death_rate:
+            elif u < self.diversification_model_sum_of_speciation_and_extinction_rate:
                 splitting_lineages.add(lineage)
             visited_lineages += 1
         if not visited_lineages:
@@ -802,7 +802,7 @@ class SupertrampSimulator(object):
                 finalize_distribution_label=True,
                 nsplits=1)
         assert len(children) == 2
-        self.num_births += 1
+        self.num_speciations += 1
         if self.debug_mode:
             try:
                 self.phylogeny._debug_check_tree()
