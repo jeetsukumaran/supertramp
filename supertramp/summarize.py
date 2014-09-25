@@ -2,7 +2,7 @@
 
 import collections
 import dendropy
-from dendropy.calculate import treestat
+from dendropy.calculate import treemeasure
 from dendropy.model import birthdeath
 from supertramp import BitVector
 
@@ -151,7 +151,7 @@ class TreeProcessor(object):
                             else:
                                 interior_habitat_nodes.append(nd)
 
-            pdm = treestat.PatristicDistanceMatrix(tree=tree)
+            pdm = treemeasure.PatristicDistanceMatrix(tree=tree)
             tree.stats = collections.defaultdict(lambda:"NA")
             if params is not None:
                 tree.params = params.copy()
