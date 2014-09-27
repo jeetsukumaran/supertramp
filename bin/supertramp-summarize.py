@@ -69,14 +69,10 @@ def main():
                 if args.group_processed_trees_by_model:
                     out_fname = job
                 else:
-                    print(job)
                     parts = job.rsplit("_", 1)
                     assert len(parts) == 2
-                    print(parts)
                     model_name = parts[-1]
                     out_fname = parts[0]
-                    print(model_name)
-                    print(out_fname)
                 colorized_trees_filepath = os.path.join(output_dir, "{}.processed.{}.{}.trees".format(out_fname, color_scheme, model_name))
                 with open(colorized_trees_filepath, "w") as trees_outf:
                     tree_processor.write_colorized_trees(trees_outf, trees, color_scheme)
