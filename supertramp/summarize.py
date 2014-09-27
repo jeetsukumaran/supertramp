@@ -46,6 +46,110 @@ class ColorAssigner(object):
                 self.assigned_colors[code] = self.COLORS[on_bits[0]+self.offset]
             return self.assigned_colors[code]
 
+class Rcalculator(object):
+
+    def __init__(self):
+        pass
+
+    def _compose_cophenetic_matrix(
+            self,
+            dists,
+            taxon_names,
+            byrow=True,
+            ):
+        return "matrix(c({data}), nrow={nrow}, byrow={byrow}, dimnames=list(c({names}),c({names})))".format(
+            data=",".join("{}".format(d) for d in dists),
+            nrow=len(taxon_names),
+            byrow="T" if byrow else "F",
+            names=",".join(taxon_names))
+
+    def _compose_community_matrix(
+            self,
+            data,
+            comm_names,
+            taxon_names,
+            byrow=True,
+            ):
+        return "matrix(c({data}), nrow={nrow}, byrow={byrow}, dimnames=list(c({comm_names}),c({taxon_names})))".format(
+            data=",".join("{}".format(d) for d in data),
+            nrow=len(comm_names),
+            byrow="T" if byrow else "F",
+            comm_names=",".join(comm_names),
+            taxon_names=",".join(taxon_names)
+            )
+
+    def calc_ecological_stats(
+            self,
+            tree,
+            patristic_distance_matrix,
+            total_tree_length,
+            total_tree_edges,
+            nodes_by_island,
+            nodes_by_habitat,
+            disturbed_habitat_nodes,
+            interior_habitat_nodes,
+            ):
+        pdm = patristic_distance_matrix
+        leaf_taxa = set([leaf.taxon for leaf in tree.leaf_node_iter()])
+        tree_taxa = [t for t in tree.taxon_namespace if t in leaf_taxa] # to maintain order
+        taxon_names = []
+        weighted_dists = []
+        unweighted_dists = []
+        normalized_weighted_dists = []
+        normalized_unweighted_dists = []
+        for taxon1 in tree_taxa:
+            taxon_names.append("'{}'".format(taxon1.label))
+            for taxon2 in tree_taxa:
+                weighted_dist = pdm(taxon1, taxon2)
+                unweighted_dist = pdm.path_edge_count(taxon1, taxon2)
+                normalized_weighted_dist = weighted_dist / total_tree_length
+                normalized_unweighted_dist = unweighted_dist / total_tree_edges
+                weighted_dists.append(weighted_dist)
+                unweighted_dists.append(unweighted_dist)
+                normalized_weighted_dists.append(normalized_weighted_dist)
+                normalized_unweighted_dists.append(normalized_unweighted_dist)
+
+
+        rscript = []
+        for dists, dists_desc in (
+                    # (weighted_dists, "weighted"),
+                    # (unweighted_dists, "unweighted"),
+                    (normalized_weighted_dists, "normalized_weighted"),
+                    (normalized_unweighted_dists, "normalized_unweighted"),
+                ):
+            cophenetic_dist_matrix_str = self._compose_cophenetic_matrix(
+                    dists=dists,
+                    taxon_names=taxon_names)
+            cophenetic_dist_matrix_name = "{}_cophenetic_dist_matrix".format(dists_desc)
+            rscript.append("{} <- {}".format(cophenetic_dist_matrix_name, cophenetic_dist_matrix_str))
+        for comm_data, comm_desc in (
+            (nodes_by_island, "by_island"),
+            (nodes_by_habitat, "by_habitat"),
+                ):
+            comm_names = []
+            pa_data = []
+            for idx in comm_data:
+                comm_taxa = [nd.taxon for nd in comm_data[idx]]
+                # print("# {}: {}: {} of {}: {}\n".format(comm_desc, idx, len(comm_taxa), len(tree_taxa), ", ".join(t.label for t in comm_taxa)))
+                comm_names.append("'Z{}'".format(idx))
+                for taxon in tree_taxa:
+                    if taxon in comm_taxa:
+                        pa_data.append(1)
+                    else:
+                        pa_data.append(0)
+            comm_pa_matrix_name = "community_{}".format(comm_desc)
+            comm_pa_matrix_str = self._compose_community_matrix(
+                    data=pa_data,
+                    comm_names=comm_names,
+                    taxon_names=["'{}'".format(t.label) for t in tree_taxa])
+            rscript.append("{} <- {}".format(comm_pa_matrix_name, comm_pa_matrix_str))
+
+        rscript = "\n".join(rscript)
+        # print(rscript)
+
+
+
+
 class TreeProcessor(object):
 
     def __init__(self):
@@ -67,6 +171,7 @@ class TreeProcessor(object):
         self.island_colors = ColorAssigner()
         self.habitat_colors = ColorAssigner()
         self.drop_stunted_trees = True
+        self.rcalc = Rcalculator()
 
     def write_colorized_trees(self, outf, trees, scheme):
         if scheme == "by-island":
@@ -111,12 +216,29 @@ class TreeProcessor(object):
             summaries=None):
         self.encode_taxa(_get_taxa(trees))
         stats_fields = set()
+
+        # crucial assumption here is all trees from same landscape wrt to
+        # number of islands and habitats
+        # representative_taxon = trees[0].taxon_namespace[0]
+        # community_by_island = {}
+        # community_by_habitat = {}
+        # community_by_disturbed_vs_interior_habitat = {}
+        # num_islands = len(representative_taxon.island_code)
+        # num_habitats = len(representative_taxon.habitat_code)
+        # for i in num_islands:
+        #     community_by_island[i] = {}
+        # for i in num_habitats:
+        #     community_by_habitat[i] = {}
+        # community_by_disturbed_vs_interior_habitat[0] = {}
+        # community_by_disturbed_vs_interior_habitat[1] = {}
+
         for tree in list(trees):
             if self.drop_stunted_trees and tree.seed_node.num_child_nodes() <= 1:
                 trees.remove(tree)
                 continue
             num_tips = 0
             total_length = 0.0
+            total_edges = 0
             nodes_by_island = collections.defaultdict(list)
             nodes_by_habitat = collections.defaultdict(list)
             disturbed_habitat_nodes = []
@@ -130,6 +252,7 @@ class TreeProcessor(object):
                 if nd.label is not None:
                     self.encode_labeled_item(nd)
                 # stats
+                total_edges += 1
                 num_tips += 1
                 total_length += nd.edge.length
                 if nd.is_leaf():
@@ -149,7 +272,8 @@ class TreeProcessor(object):
                             if habitat_idx == 0:
                                 disturbed_habitat_nodes.append(nd)
                             else:
-                                interior_habitat_nodes.append(nd)
+                                if nd not in interior_habitat_nodes:
+                                    interior_habitat_nodes.append(nd)
 
             pdm = treemeasure.PatristicDistanceMatrix(tree=tree)
             tree.stats = collections.defaultdict(lambda:"NA")
@@ -157,6 +281,7 @@ class TreeProcessor(object):
                 tree.params = params.copy()
             tree.stats["size"] = num_tips
             tree.stats["length"] = total_length
+            tree.stats["edges"] = total_edges
             # node_ages = tree.internal_node_ages()
             # node_ages = [n/total_length for n in node_ages]
             # tree.stats["est.birth.rate"] = birthdeath.fit_pure_birth_model(internal_node_ages=node_ages)["birth_rate"]
@@ -174,6 +299,17 @@ class TreeProcessor(object):
             except (ZeroDivisionError, TypeError):
                 tree.stats["weighted.disturbed.to.interior.habitat.pd"] = "NA"
                 tree.stats["unweighted.disturbed.to.interior.habitat.pd"] = "NA"
+
+            rstats = self.rcalc.calc_ecological_stats(
+                    tree=tree,
+                    patristic_distance_matrix=pdm,
+                    total_tree_length=total_length,
+                    total_tree_edges=total_edges,
+                    nodes_by_island=nodes_by_island,
+                    nodes_by_habitat=nodes_by_habitat,
+                    disturbed_habitat_nodes=disturbed_habitat_nodes,
+                    interior_habitat_nodes=interior_habitat_nodes,
+                    )
 
             stats_fields.update(tree.stats.keys())
 

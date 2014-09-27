@@ -357,8 +357,9 @@ class TotalExtinctionException(Exception):
         Exception.__init__(self, *args, **kwargs)
 
 class TargetNumberOfTipsException(Exception):
-    def __init__(self, ntax, *args, **kwargs):
-        self.ntax = ntax
+    def __init__(self, num_extant_tips_exception_trigger, num_extant_tips, *args, **kwargs):
+        self.num_extant_tips = num_extant_tips
+        self.num_extant_tips_exception_trigger = num_extant_tips_exception_trigger
         Exception.__init__(self, *args, **kwargs)
 
 class SupertrampSimulator(object):
@@ -680,12 +681,23 @@ class SupertrampSimulator(object):
         return len(self.habitat_types)
 
     def run(self, ngens=None, ntips=None):
-        self.run_logger.info(
-            "Running from generation {start} to generation {stop} ({ngens} generations)".format(
-            start=self.current_gen+1,
-            ngens=ngens,
-            stop=self.current_gen + ngens,
-            ))
+        info = ["Running from generation {} ".format(self.current_gen+1)]
+        if ntips is not None and ngens is not None:
+            info.append(" to generation {stop} ({ngens} generations) or until {ntax} extant tips observed".format(
+                stop=self.current_gen + ngens,
+                ngens=ngens,
+                ntax=ntips))
+        elif ntips is not None:
+            info.append(" until {ntax} extant tips observed".format(
+                ntax=ntips))
+        elif ngens is not None:
+            info.append(" to generation {stop} ({ngens} generations)".format(
+                stop=self.current_gen + ngens,
+                ngens=ngens))
+        else:
+            info.append(" with no termination condition specified")
+        info = "".join(info)
+        self.run_logger.info(info)
         self.run_logger.system = self
         cur_gen = 0
         while True:
@@ -706,7 +718,7 @@ class SupertrampSimulator(object):
         num_extant_tips = self.phylogeny.add_age_to_extant_tips(1)
         if num_extant_tips_exception_trigger is not None and num_extant_tips >= num_extant_tips_exception_trigger:
             self.run_logger.info("Number of extant tips = {}".format(num_extant_tips_exception_trigger))
-            raise TargetNumberOfTipsException(num_extant_tips)
+            raise TargetNumberOfTipsException(num_extant_tips_exception_trigger, num_extant_tips)
         if self.log_frequency is not None and self.log_frequency > 0 and self.current_gen % self.log_frequency == 0:
             self.run_logger.info("Executing life-cycle {}".format(self.current_gen))
         for island in self.islands:
@@ -1101,7 +1113,7 @@ def repeat_run_supertramp(
                 run_logger.info("||SUPERTRAMP-META|| Run {} of {}: [t={}] total extinction of all lineages before termination condition: {}".format(rep+1, nreps, supertramp_simulator.current_gen, e))
                 run_logger.info("||SUPERTRAMP-META|| Run {} of {}: restarting".format(rep+1, nreps))
             except TargetNumberOfTipsException as e:
-                run_logger.info("||SUPERTRAMP-META|| Run {} of {}: completed to termination condition of {} tips".format(rep+1, nreps, e.ntax))
+                run_logger.info("||SUPERTRAMP-META|| Run {} of {}: completed to termination condition of {} tips ({} tips observed)".format(rep+1, nreps, e.num_extant_tips_exception_trigger, e.num_extant_tips))
                 supertramp_simulator.report()
                 break
             else:

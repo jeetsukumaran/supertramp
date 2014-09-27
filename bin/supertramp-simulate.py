@@ -106,7 +106,10 @@ def main():
     target_num_tips = argsd.pop("target_num_tips")
     if target_num_tips <= 0:
         target_num_tips = None
-    default_log_frequency = int(ngens/10)
+    if ngens is None:
+        default_log_frequency = 1000
+    else:
+        default_log_frequency = int(ngens/10)
     if default_log_frequency < 1:
         default_log_frequency = 10
     if argsd["log_frequency"] is None:
