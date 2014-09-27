@@ -115,7 +115,7 @@ def main():
     #         help="Number of generations to run (default = %(default)s).")
     parser.add_argument("--nreps",
             type=int,
-            default=10,
+            default=100,
             help="number of replicates (default = %(default)s).")
     args = parser.parse_args()
 
