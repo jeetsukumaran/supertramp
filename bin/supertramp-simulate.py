@@ -88,15 +88,24 @@ def main():
             help="Do not prune lineages from the tree if they go extinct.")
 
     termination_condition_options = parser.add_argument_group("Termination Condition Options")
+    termination_condition_options.add_argument("-t", "--target-num-tips",
+            type=int,
+            default=50,
+            help="Number of tips to generate (default= %(default)s).")
     termination_condition_options.add_argument("-g", "--ngens",
             type=int,
             default=10000,
-            help="Number of generations to run (default = %(default)s).")
+            help="Number of generations to run (default= %(default)s).")
 
     args = parser.parse_args()
 
     argsd = vars(args)
     ngens = argsd.pop("ngens")
+    if ngens <= 0:
+        ngens = None
+    target_num_tips = argsd.pop("target_num_tips")
+    if target_num_tips <= 0:
+        target_num_tips = None
     default_log_frequency = int(ngens/10)
     if default_log_frequency < 1:
         default_log_frequency = 10
@@ -107,10 +116,10 @@ def main():
     output_prefix = argsd.pop("output_prefix", "supertramp_run")
     stderr_logging_level=argsd.pop("stderr_logging_level")
     file_logging_level=argsd.pop("file_logging_level")
-
     simulate.repeat_run_supertramp(
             model_params_d=argsd,
             ngens=ngens,
+            target_num_tips=target_num_tips,
             nreps=nreps,
             output_prefix=output_prefix,
             random_seed=random_seed,
