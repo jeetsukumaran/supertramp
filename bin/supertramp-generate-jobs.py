@@ -19,21 +19,42 @@ general_job_template = """\
 
 def main():
     """
-    Assumptions
-    -----------
 
-    Previously:
+    ### 2014-09-27
 
-        1 simulation generation = 100 years
-        10000 simulation generations = 1e6 years
-        Simulation run-time:        1000000 generations    = 1e8 years
-        High speciation rate:       0.001   per generation = 0.1 per MY
-        Med speciation rate:        0.0001  per generation = 0.01 per MY
-        Low speciation rate:        0.00001 per generation = 0.001 per MY
-        Dispersal rate:             0.01, 0.5, 1.0, 2.0, 10.0 x speciation rates
-        Niche evolution prob:       0.001, 0.01, 0.10, 1.0
+        b = birth-rate
+        d = "global" dispersal rate
+        e = extinction rate
 
-    2014-08-27:
+        P:5, C:2
+        ========
+            The ML estimates of the speciation rate and extinction rate for the
+            Psychotria tree are 0.33 and 0 events per Myr (estimated with the
+            “birthdeath” function of the R package geiger; Harmon et al. 2008), so, for
+            rough comparability, the base speciation rate was set to lambda=0.3 in all
+            simulations, and mu was set to 0, 0.1, or 0.3.
+
+        P:6, C:1
+        ========
+            d = {0, 0.03, 0.15}
+            e = {0, 0.03, 0.15}
+            All combinations of parameters were used, except thoise where e > d
+
+        P:7
+        ===
+
+        Number of areas:
+
+            Psychotria = 4
+
+        P:10
+        ====
+
+            b = {0.
+            d = {0.001, 0.005, 0.03, 0.04, 0.12,}
+
+
+    ### 2014-08-27
 
         Oceania
 
@@ -60,6 +81,17 @@ def main():
         Continental
 
                 For Continental with root age of 1.0,       2.8263
+
+    ### Previously
+
+        1 simulation generation = 100 years
+        10000 simulation generations = 1e6 years
+        Simulation run-time:        1000000 generations    = 1e8 years
+        High speciation rate:       0.001   per generation = 0.1 per MY
+        Med speciation rate:        0.0001  per generation = 0.01 per MY
+        Low speciation rate:        0.00001 per generation = 0.001 per MY
+        Dispersal rate:             0.01, 0.5, 1.0, 2.0, 10.0 x speciation rates
+        Niche evolution prob:       0.001, 0.01, 0.10, 1.0
 
 
     """
@@ -107,28 +139,28 @@ def main():
     #         os.path.dirname(__file__),
     #         "supertramp-simulate.py"))
     supertramp_path = "supertramp-simulate.py"
-
+    # dispersal_models = ["constrained", "unconstrained"]
+    # birth_death_rates = [(2.73e-5,0.0), ]
+    # dispersal_rates = [3.3e-6,]
+    # niche_evolution_probs = [3.3e-6,]
     dispersal_models = ["constrained", "unconstrained"]
-    # birth_rates = [0.001, 0.0001, 0.00001]
-    # dispersal_rate_factors = [0.01, 0.5, 1.0, 2.0, 10.0]
-    # niche_evolution_probs = [0.001, 0.01, 0.10, 1.0]
-
-    # Expected equilibirum species richness, per habitat (per island): 10(30), 20(60), 40(120)
-    birth_death_rates = [(2.73e-5,0.0), ]
-    dispersal_rates = [3.3e-6,]
-    niche_evolution_probs = [3.3e-6,]
+    birth_death_rates = [ (0.03, 0), ] # [(2.73e-5,0.0), ]
+    dispersal_rates = [0.001, 0.005, 0.03, 0.04, 0.12, 0.15]
+    niche_evolution_probs = [0.001, 0.005, 0.03, 0.04, 0.12, 0.15, 0.5, 1.0]
     run_manifest = {}
-    for ngens in (int(x) for x in (1e5,)):
+    # for ngens in (int(x) for x in (1e5,)):
+    for ntips in (50, 100):
         for dm_idx, dispersal_model in enumerate(dispersal_models):
             for bd_idx, (birth_rate, death_rate) in enumerate(birth_death_rates):
                 for drf_idx, dispersal_rate in enumerate(dispersal_rates):
                     for nef_idx, niche_evolution_prob in enumerate(niche_evolution_probs):
-                        stem = "{dispersal_model}_b{birth_rate:10.8f}_d{death_rate:10.8f}_r{dispersal_rate:10.8f}_n{niche_evolution_prob:10.8f}".format(
-                                dispersal_model=dispersal_model,
+                        stem = "d{dispersal_rate:10.8f}_q{niche_evolution_prob:10.8f}_b{birth_rate:10.8f}_e{death_rate:10.8f}_{dispersal_model}".format(
+                                dispersal_rate=dispersal_rate,
+                                niche_evolution_prob=niche_evolution_prob,
                                 birth_rate=birth_rate,
                                 death_rate=death_rate,
-                                dispersal_rate=dispersal_rate,
-                                niche_evolution_prob=niche_evolution_prob)
+                                dispersal_model=dispersal_model,
+                                )
                         output_prefix = stem
                         run_cmd = []
                         run_cmd.append(supertramp_path)
@@ -140,7 +172,8 @@ def main():
                         run_cmd.extend(["-d", str(death_rate)])
                         run_cmd.extend(["--niche-evolution-probability", str(niche_evolution_prob)])
                         run_cmd.extend(["--dispersal-rate", str(dispersal_rate)])
-                        run_cmd.extend(["--ngens", str(ngens)])
+                        # run_cmd.extend(["--ngens", str(ngens)])
+                        run_cmd.extend(["--target-num-tips", str(ntips)])
                         run_cmd.extend(["--output-prefix", output_prefix])
                         run_cmd.extend(["--dispersal-model", dispersal_model])
                         run_cmd = " ".join(run_cmd)
@@ -161,7 +194,8 @@ def main():
                                 "death_rate"            : death_rate,
                                 "dispersal_rate"        : dispersal_rate,
                                 "niche_evolution_prob"  : niche_evolution_prob,
-                                "ngens"                 : ngens,
+                                # "ngens"                 : ngens,
+                                "ntips"                 : ntips,
                                 "treefile"              : output_prefix + ".trees",
                                 "logfile"               : output_prefix + ".log",
                                 }
