@@ -145,11 +145,16 @@ def main():
     # niche_evolution_probs = [3.3e-6,]
     dispersal_models = ["constrained", "unconstrained"]
     birth_death_rates = [ (0.03, 0), ] # [(2.73e-5,0.0), ]
-    dispersal_rates = [0.001, 0.005, 0.03, 0.04, 0.12, 0.15]
-    niche_evolution_probs = [0.001, 0.005, 0.03, 0.04, 0.12, 0.15, 0.5, 1.0]
+    dispersal_rates = [
+            0.001, # no mvoement with ntips = 50 or 100
+            0.005, 0.03, 0.04, 0.12, 0.15]
+    niche_evolution_probs = [
+            0.001, # no evolution with ntips = 50 or 100
+            0.005, # no evolution with ntips = 50
+            0.03, 0.04, 0.12, 0.15, 0.5, 1.0]
     run_manifest = {}
     # for ngens in (int(x) for x in (1e5,)):
-    for ntips in (50, 100):
+    for ntips in (50,):
         for dm_idx, dispersal_model in enumerate(dispersal_models):
             for bd_idx, (birth_rate, death_rate) in enumerate(birth_death_rates):
                 for drf_idx, dispersal_rate in enumerate(dispersal_rates):

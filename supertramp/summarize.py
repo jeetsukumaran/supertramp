@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 
+import os
 import collections
 import dendropy
 from dendropy.calculate import treemeasure
@@ -143,6 +144,7 @@ class Rcalculator(object):
                     comm_names=comm_names,
                     taxon_names=["'{}'".format(t.label) for t in tree_taxa])
             rscript.append("{} <- {}".format(comm_pa_matrix_name, comm_pa_matrix_str))
+            print("{}\t{}\t{}".format(comm_desc, len(comm_names), os.path.basename(tree.treefile)))
 
         rscript = "\n".join(rscript)
         # print(rscript)

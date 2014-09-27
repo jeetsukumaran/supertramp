@@ -60,6 +60,8 @@ def main():
             trees = dendropy.TreeList.get_from_path(
                     tree_filepath,
                     "newick")
+            for tree in trees:
+                tree.treefile = tree_filepath
             summary_stat, sub_stats_fields = tree_processor.process_trees(
                     trees,
                     params=params,
