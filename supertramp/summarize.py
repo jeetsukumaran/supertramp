@@ -65,9 +65,14 @@ class Rcalculator(object):
         p = subprocess.Popen(cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 )
         stdout, stderr = session.communicate(p, script)
-        assert p.returncode == 0
+        if p.returncode != 0:
+            print(script)
+            for row in stderr.split("\n"):
+                print("# {}".format(row))
+            sys.exit(p.returncode)
         results = {}
         num_lines_with_results = 0
         for line in stdout.split("\n"):
@@ -75,7 +80,12 @@ class Rcalculator(object):
                 continue
             parts = line[len(Rcalculator.RESULT_FLAG_LEADER):].split("=")
             assert len(parts) == 2
-            results[parts[0].strip()] = float(parts[1].strip())
+            key = parts[0].strip()
+            try:
+                value = float(parts[1].strip())
+            except ValueError as e:
+                value = "NA"
+            results[key] = value
             num_lines_with_results += 1
         return results
 
@@ -220,6 +230,8 @@ class TreeProcessor(object):
         self.island_colors = ColorAssigner()
         self.habitat_colors = ColorAssigner()
         self.drop_stunted_trees = True
+        self.drop_trees_not_occupying_all_islands = True
+        self.drop_trees_not_occupying_all_habitats = True
         self.rcalc = Rcalculator()
 
     def write_colorized_trees(self, outf, trees, scheme):
@@ -268,12 +280,12 @@ class TreeProcessor(object):
 
         # crucial assumption here is all trees from same landscape wrt to
         # number of islands and habitats
-        # representative_taxon = trees[0].taxon_namespace[0]
+        representative_taxon = trees[0].taxon_namespace[0]
+        community_by_disturbed_vs_interior_habitat = {}
+        num_islands = len(representative_taxon.island_code)
+        num_habitats = len(representative_taxon.habitat_code)
         # community_by_island = {}
         # community_by_habitat = {}
-        # community_by_disturbed_vs_interior_habitat = {}
-        # num_islands = len(representative_taxon.island_code)
-        # num_habitats = len(representative_taxon.habitat_code)
         # for i in num_islands:
         #     community_by_island[i] = {}
         # for i in num_habitats:
@@ -323,7 +335,12 @@ class TreeProcessor(object):
                             else:
                                 if nd not in interior_habitat_nodes:
                                     interior_habitat_nodes.append(nd)
-
+            if len(nodes_by_island) < num_islands and self.drop_trees_not_occupying_all_islands:
+                trees.remove(tree)
+                continue
+            if len(nodes_by_habitat) < num_habitats and self.drop_trees_not_occupying_all_habitats:
+                trees.remove(tree)
+                continue
             pdm = treemeasure.PatristicDistanceMatrix(tree=tree)
             tree.stats = collections.defaultdict(lambda:"NA")
             if params is not None:
