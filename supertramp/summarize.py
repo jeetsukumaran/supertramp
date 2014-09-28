@@ -3,8 +3,10 @@
 import os
 import collections
 import dendropy
+import subprocess
 from dendropy.calculate import treemeasure
 from dendropy.model import birthdeath
+from dendropy.utility import session
 from supertramp import BitVector
 
 if dendropy.__version__.startswith("4"):
@@ -49,8 +51,31 @@ class ColorAssigner(object):
 
 class Rcalculator(object):
 
+    RESULT_FLAG_LEADER = "[!!!]"
+
     def __init__(self):
         pass
+
+    def execute_rscript(self, script):
+        cmd = []
+        cmd.append("Rscript")
+        cmd.append("--vanilla")
+        cmd.append("-")
+        p = subprocess.Popen(cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                )
+        stdout, stderr = session.communicate(p, script)
+        assert p.returncode == 0
+        results = {}
+        for line in stdout.split("\n"):
+            if not line.startswith(Rcalculator.RESULT_FLAG_LEADER):
+                continue
+            parts = line[len(Rcalculator.RESULT_FLAG_LEADER):].split("=")
+            assert len(parts) == 2
+            results[parts[0].strip()] = float(parts[1].strip())
+        print(results)
+        return results
 
     def _compose_cophenetic_matrix(
             self,
@@ -112,6 +137,7 @@ class Rcalculator(object):
 
 
         rscript = []
+        rscript.append("library(picante)")
         for dists, dists_desc in (
                     # (weighted_dists, "weighted"),
                     # (unweighted_dists, "unweighted"),
@@ -144,13 +170,16 @@ class Rcalculator(object):
                     comm_names=comm_names,
                     taxon_names=["'{}'".format(t.label) for t in tree_taxa])
             rscript.append("{} <- {}".format(comm_pa_matrix_name, comm_pa_matrix_str))
-            print("{}\t{}\t{}".format(comm_desc, len(comm_names), os.path.basename(tree.treefile)))
-
+            rscript.append("result <- ses.mpd({comm},{dists},null.model='taxa.labels',abundance.weighted=FALSE,runs=99)".format(
+                comm=comm_pa_matrix_name,
+                dists=cophenetic_dist_matrix_name))
+            prefix = "{comm}.{dists}".format(comm=comm_pa_matrix_name,
+                    dists=cophenetic_dist_matrix_name.replace("_cophenetic_dist_matrix", "")).replace("_", ".")
+            rscript.append("write(paste('{result_flag}', '{prefix}.NRI', '=', mean(-1 * result$mpd.obs.z), '\n'), stdout())".format(
+                result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                prefix=prefix))
         rscript = "\n".join(rscript)
-        # print(rscript)
-
-
-
+        results = self.execute_rscript(rscript)
 
 class TreeProcessor(object):
 
