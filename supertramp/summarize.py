@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 
+import sys
 import os
 import collections
 import dendropy
@@ -68,13 +69,14 @@ class Rcalculator(object):
         stdout, stderr = session.communicate(p, script)
         assert p.returncode == 0
         results = {}
+        num_lines_with_results = 0
         for line in stdout.split("\n"):
             if not line.startswith(Rcalculator.RESULT_FLAG_LEADER):
                 continue
             parts = line[len(Rcalculator.RESULT_FLAG_LEADER):].split("=")
             assert len(parts) == 2
             results[parts[0].strip()] = float(parts[1].strip())
-        print(results)
+            num_lines_with_results += 1
         return results
 
     def _compose_cophenetic_matrix(
@@ -134,8 +136,6 @@ class Rcalculator(object):
                 unweighted_dists.append(unweighted_dist)
                 normalized_weighted_dists.append(normalized_weighted_dist)
                 normalized_unweighted_dists.append(normalized_unweighted_dist)
-
-
         rscript = []
         rscript.append("suppressMessages(library(picante))")
         for dists, dists_desc in (
@@ -149,16 +149,16 @@ class Rcalculator(object):
                     taxon_names=taxon_names)
             cophenetic_dist_matrix_name = "{}_cophenetic_dist_matrix".format(dists_desc)
             rscript.append("{} <- {}".format(cophenetic_dist_matrix_name, cophenetic_dist_matrix_str))
-            for comm_data, comm_desc in (
-                (nodes_by_island, "by_island"),
-                (nodes_by_habitat, "by_habitat"),
+            for comm_prefix, comm_data, comm_desc in (
+                ("I", nodes_by_island, "by_island"),
+                ("H", nodes_by_habitat, "by_habitat"),
                     ):
                 comm_names = []
                 pa_data = []
                 for idx in comm_data:
                     comm_taxa = [nd.taxon for nd in comm_data[idx]]
                     # print("# {}: {}: {} of {}: {}\n".format(comm_desc, idx, len(comm_taxa), len(tree_taxa), ", ".join(t.label for t in comm_taxa)))
-                    comm_names.append("'Z{}'".format(idx))
+                    comm_names.append("'{}{}'".format(comm_prefix, idx))
                     for taxon in tree_taxa:
                         if taxon in comm_taxa:
                             pa_data.append(1)
@@ -173,32 +173,27 @@ class Rcalculator(object):
                 nruns = 100
                 prefix = "{comm}.{dists}".format(comm=comm_pa_matrix_name,
                         dists=cophenetic_dist_matrix_name.replace("_cophenetic_dist_matrix", "")).replace("_", ".")
-                rscript.append("result <- ses.mpd({comm},{dists},null.model='taxa.labels',abundance.weighted=FALSE,runs={nruns})".format(
-                    comm=comm_pa_matrix_name,
-                    dists=cophenetic_dist_matrix_name,
-                    nruns=nruns))
-                rscript.append("write(paste('{result_flag}', '{prefix}.mpd.obs.Z', '=', result$mpd.obs.z, '\n'), stdout())".format(
-                    result_flag=Rcalculator.RESULT_FLAG_LEADER,
-                    prefix=prefix))
-                rscript.append("write(paste('{result_flag}', '{prefix}.NRI', '=', mean(-1 * result$mpd.obs.z), '\n'), stdout())".format(
-                    result_flag=Rcalculator.RESULT_FLAG_LEADER,
-                    prefix=prefix))
-                rscript.append("write(paste('{result_flag}', '{prefix}.mpd.obs.p', '=', result$mpd.obs.p, '\n'), stdout())".format(
-                    result_flag=Rcalculator.RESULT_FLAG_LEADER,
-                    prefix=prefix))
-                rscript.append("result <- ses.mntd({comm},{dists},null.model='taxa.labels',abundance.weighted=FALSE,runs={nruns})".format(
-                    comm=comm_pa_matrix_name,
-                    dists=cophenetic_dist_matrix_name,
-                    nruns=nruns))
-                rscript.append("write(paste('{result_flag}', '{prefix}.mntd.obs.Z', '=', result$mntd.obs.z, '\n'), stdout())".format(
-                    result_flag=Rcalculator.RESULT_FLAG_LEADER,
-                    prefix=prefix))
-                rscript.append("write(paste('{result_flag}', '{prefix}.NTI', '=', mean(-1 * result$mntd.obs.z), '\n'), stdout())".format(
-                    result_flag=Rcalculator.RESULT_FLAG_LEADER,
-                    prefix=prefix))
-                rscript.append("write(paste('{result_flag}', '{prefix}.mntd.obs.p', '=', result$mntd.obs.p, '\n'), stdout())".format(
-                    result_flag=Rcalculator.RESULT_FLAG_LEADER,
-                    prefix=prefix))
+                out = "stdout()"
+                # out = "'z.txt'"
+                for stat_type in ("mpd", "mntd"):
+                    rscript.append("result <- ses.{stat_type}({comm},{dists},null.model='taxa.labels',abundance.weighted=FALSE,runs={nruns})".format(
+                        stat_type=stat_type,
+                        comm=comm_pa_matrix_name,
+                        dists=cophenetic_dist_matrix_name,
+                        nruns=nruns))
+                    rscript.append("result.df <- as.data.frame(result)")
+                    rscript.append("write(paste('{result_flag}', '{prefix}.{stat_type}.obs.Z.', rownames(result.df), ' = ', result.df${stat_type}.obs.z, '\\n', sep=''), {out})".format(
+                        stat_type=stat_type,
+                        result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                        prefix=prefix,
+                        out=out,
+                        ))
+                    rscript.append("write(paste('{result_flag}', '{prefix}.{stat_type}.obs.p.', rownames(result.df), ' = ', result.df${stat_type}.obs.p, '\\n', sep=''), {out})".format(
+                        stat_type=stat_type,
+                        result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                        prefix=prefix,
+                        out=out,
+                        ))
         rscript = "\n".join(rscript)
         results = self.execute_rscript(rscript)
         tree.stats.update(results)
