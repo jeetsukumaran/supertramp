@@ -10,6 +10,24 @@ import dendropy
 
 from supertramp import summarize
 
+# library(adegenet)
+# summary.df = read.table("processed/summary.txt", header=T)
+# summary.df = na.omit(summary.df)
+# groups = summary.df$dispersal.model
+# cols.to.drop <- c(
+#                   "dispersal.model",
+#                   "birth.rate",
+#                   "death.rate",
+#                   "dispersal.rate",
+#                   "niche.evolution.prob",
+#                   "edges",
+#                   "est.birth.rate",
+#                   "length",
+#                   "size"
+#                   )
+# predictors = summary.df[,!(names(summary.df) %in% cols.to.drop)]
+# result = dapc(predictors, groups)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(

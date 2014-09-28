@@ -192,13 +192,38 @@ class Rcalculator(object):
                         dists=cophenetic_dist_matrix_name,
                         nruns=nruns))
                     rscript.append("result.df <- as.data.frame(result)")
-                    rscript.append("write(paste('{result_flag}', '{prefix}.{stat_type}.obs.Z.', rownames(result.df), ' = ', result.df${stat_type}.obs.z, '\\n', sep=''), {out})".format(
+                    if comm_desc == "by_habitat":
+                        rscript.append("write(paste('{result_flag}', '{prefix}.{stat_type}.obs.Z.', rownames(result.df), ' = ', result.df${stat_type}.obs.z, '\\n', sep=''), {out})".format(
+                            stat_type=stat_type,
+                            result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                            prefix=prefix,
+                            out=out,
+                            ))
+                        rscript.append("write(paste('{result_flag}', '{prefix}.{stat_type}.obs.p.', rownames(result.df), ' = ', result.df${stat_type}.obs.p, '\\n', sep=''), {out})".format(
+                            stat_type=stat_type,
+                            result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                            prefix=prefix,
+                            out=out,
+                            ))
+                    rscript.append("write(paste('{result_flag}', '{prefix}.{stat_type}.obs.Z.mean', ' = ', mean(result.df${stat_type}.obs.z), '\\n', sep=''), {out})".format(
                         stat_type=stat_type,
                         result_flag=Rcalculator.RESULT_FLAG_LEADER,
                         prefix=prefix,
                         out=out,
                         ))
-                    rscript.append("write(paste('{result_flag}', '{prefix}.{stat_type}.obs.p.', rownames(result.df), ' = ', result.df${stat_type}.obs.p, '\\n', sep=''), {out})".format(
+                    rscript.append("write(paste('{result_flag}', '{prefix}.{stat_type}.obs.p.mean', ' = ', mean(result.df${stat_type}.obs.p), '\\n', sep=''), {out})".format(
+                        stat_type=stat_type,
+                        result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                        prefix=prefix,
+                        out=out,
+                        ))
+                    rscript.append("write(paste('{result_flag}', '{prefix}.{stat_type}.obs.Z.var', ' = ', var(result.df${stat_type}.obs.z), '\\n', sep=''), {out})".format(
+                        stat_type=stat_type,
+                        result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                        prefix=prefix,
+                        out=out,
+                        ))
+                    rscript.append("write(paste('{result_flag}', '{prefix}.{stat_type}.obs.p.var', ' = ', var(result.df${stat_type}.obs.p), '\\n', sep=''), {out})".format(
                         stat_type=stat_type,
                         result_flag=Rcalculator.RESULT_FLAG_LEADER,
                         prefix=prefix,
