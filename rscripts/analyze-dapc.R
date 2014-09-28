@@ -26,8 +26,9 @@ analyze.dapc = function(n.pc, n.da) {
                         pp.model=dapc.result$posterior)
     mean.pp.for.correct.model = mean(c(model.prefs[model.prefs$dispersal.model == "constrained",]$pp.model.constrained,
                                     model.prefs[model.prefs$dispersal.model == "unconstrained",]$pp.model.unconstrained))
-    mean.count.correct.model.preferred = nrow(model.prefs[model.prefs$dispersal.model=="constrained" & model.prefs$pp.model.constrained>0.5,])
-                                        + nrow(model.prefs[model.prefs$dispersal.model=="unconstrained" & model.prefs$pp.model.unconstrained>0.5,])
+    debug1 = nrow(model.prefs[model.prefs$dispersal.model=="constrained" & model.prefs$pp.model.constrained>0.5,])
+    debug2 = nrow(model.prefs[model.prefs$dispersal.model=="unconstrained" & model.prefs$pp.model.unconstrained>0.5,])
+    mean.count.correct.model.preferred = nrow(model.prefs[model.prefs$dispersal.model=="constrained" & model.prefs$pp.model.constrained>0.5,]) + nrow(model.prefs[model.prefs$dispersal.model=="unconstrained" & model.prefs$pp.model.unconstrained>0.5,])
     mean.prop.correct.model.preferred = mean.count.correct.model.preferred / nrow(model.prefs)
     rv = list(
               dapc.result=dapc.result,
@@ -35,7 +36,9 @@ analyze.dapc = function(n.pc, n.da) {
               model.prefs=model.prefs,
               mean.pp.for.correct.model=mean.pp.for.correct.model,
               mean.count.correct.model.preferred=mean.count.correct.model.preferred,
-              mean.prop.correct.model.preferred=mean.prop.correct.model.preferred
+              mean.prop.correct.model.preferred=mean.prop.correct.model.preferred,
+              debug1=debug1,
+              debug2=debug2
               )
     rv
 }
@@ -61,4 +64,5 @@ assess.vars = function() {
             result = rbind(result, subresult)
         }
     }
+    result
 }
