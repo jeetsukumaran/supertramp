@@ -65,4 +65,6 @@ assess.vars = function() {
         }
     }
     result
+    #  z.pp = result[order(-result$mean.pp.for.correct.model,result$n.pc,result$n.da),]
+    #  z.prop = result[order(-result$mean.prop.correct.model.preferred,result$n.pc,result$n.da),]
 }
