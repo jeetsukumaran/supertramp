@@ -137,7 +137,7 @@ class Rcalculator(object):
 
 
         rscript = []
-        rscript.append("library(picante)")
+        rscript.append("suppressMessages(library(picante))")
         for dists, dists_desc in (
                     # (weighted_dists, "weighted"),
                     # (unweighted_dists, "unweighted"),
@@ -149,37 +149,60 @@ class Rcalculator(object):
                     taxon_names=taxon_names)
             cophenetic_dist_matrix_name = "{}_cophenetic_dist_matrix".format(dists_desc)
             rscript.append("{} <- {}".format(cophenetic_dist_matrix_name, cophenetic_dist_matrix_str))
-        for comm_data, comm_desc in (
-            (nodes_by_island, "by_island"),
-            (nodes_by_habitat, "by_habitat"),
-                ):
-            comm_names = []
-            pa_data = []
-            for idx in comm_data:
-                comm_taxa = [nd.taxon for nd in comm_data[idx]]
-                # print("# {}: {}: {} of {}: {}\n".format(comm_desc, idx, len(comm_taxa), len(tree_taxa), ", ".join(t.label for t in comm_taxa)))
-                comm_names.append("'Z{}'".format(idx))
-                for taxon in tree_taxa:
-                    if taxon in comm_taxa:
-                        pa_data.append(1)
-                    else:
-                        pa_data.append(0)
-            comm_pa_matrix_name = "community_{}".format(comm_desc)
-            comm_pa_matrix_str = self._compose_community_matrix(
-                    data=pa_data,
-                    comm_names=comm_names,
-                    taxon_names=["'{}'".format(t.label) for t in tree_taxa])
-            rscript.append("{} <- {}".format(comm_pa_matrix_name, comm_pa_matrix_str))
-            rscript.append("result <- ses.mpd({comm},{dists},null.model='taxa.labels',abundance.weighted=FALSE,runs=99)".format(
-                comm=comm_pa_matrix_name,
-                dists=cophenetic_dist_matrix_name))
-            prefix = "{comm}.{dists}".format(comm=comm_pa_matrix_name,
-                    dists=cophenetic_dist_matrix_name.replace("_cophenetic_dist_matrix", "")).replace("_", ".")
-            rscript.append("write(paste('{result_flag}', '{prefix}.NRI', '=', mean(-1 * result$mpd.obs.z), '\n'), stdout())".format(
-                result_flag=Rcalculator.RESULT_FLAG_LEADER,
-                prefix=prefix))
+            for comm_data, comm_desc in (
+                (nodes_by_island, "by_island"),
+                (nodes_by_habitat, "by_habitat"),
+                    ):
+                comm_names = []
+                pa_data = []
+                for idx in comm_data:
+                    comm_taxa = [nd.taxon for nd in comm_data[idx]]
+                    # print("# {}: {}: {} of {}: {}\n".format(comm_desc, idx, len(comm_taxa), len(tree_taxa), ", ".join(t.label for t in comm_taxa)))
+                    comm_names.append("'Z{}'".format(idx))
+                    for taxon in tree_taxa:
+                        if taxon in comm_taxa:
+                            pa_data.append(1)
+                        else:
+                            pa_data.append(0)
+                comm_pa_matrix_name = "community_{}".format(comm_desc)
+                comm_pa_matrix_str = self._compose_community_matrix(
+                        data=pa_data,
+                        comm_names=comm_names,
+                        taxon_names=["'{}'".format(t.label) for t in tree_taxa])
+                rscript.append("{} <- {}".format(comm_pa_matrix_name, comm_pa_matrix_str))
+                nruns = 100
+                prefix = "{comm}.{dists}".format(comm=comm_pa_matrix_name,
+                        dists=cophenetic_dist_matrix_name.replace("_cophenetic_dist_matrix", "")).replace("_", ".")
+                rscript.append("result <- ses.mpd({comm},{dists},null.model='taxa.labels',abundance.weighted=FALSE,runs={nruns})".format(
+                    comm=comm_pa_matrix_name,
+                    dists=cophenetic_dist_matrix_name,
+                    nruns=nruns))
+                rscript.append("write(paste('{result_flag}', '{prefix}.mpd.obs.Z', '=', result$mpd.obs.z, '\n'), stdout())".format(
+                    result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                    prefix=prefix))
+                rscript.append("write(paste('{result_flag}', '{prefix}.NRI', '=', mean(-1 * result$mpd.obs.z), '\n'), stdout())".format(
+                    result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                    prefix=prefix))
+                rscript.append("write(paste('{result_flag}', '{prefix}.mpd.obs.p', '=', result$mpd.obs.p, '\n'), stdout())".format(
+                    result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                    prefix=prefix))
+                rscript.append("result <- ses.mntd({comm},{dists},null.model='taxa.labels',abundance.weighted=FALSE,runs={nruns})".format(
+                    comm=comm_pa_matrix_name,
+                    dists=cophenetic_dist_matrix_name,
+                    nruns=nruns))
+                rscript.append("write(paste('{result_flag}', '{prefix}.mntd.obs.Z', '=', result$mntd.obs.z, '\n'), stdout())".format(
+                    result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                    prefix=prefix))
+                rscript.append("write(paste('{result_flag}', '{prefix}.NTI', '=', mean(-1 * result$mntd.obs.z), '\n'), stdout())".format(
+                    result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                    prefix=prefix))
+                rscript.append("write(paste('{result_flag}', '{prefix}.mntd.obs.p', '=', result$mntd.obs.p, '\n'), stdout())".format(
+                    result_flag=Rcalculator.RESULT_FLAG_LEADER,
+                    prefix=prefix))
         rscript = "\n".join(rscript)
         results = self.execute_rscript(rscript)
+        tree.stats.update(results)
+        return results
 
 class TreeProcessor(object):
 
