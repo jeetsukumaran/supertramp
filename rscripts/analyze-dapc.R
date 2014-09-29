@@ -45,8 +45,9 @@ analyze.dapc = function(n.pc, n.da) {
 
 assess.vars = function() {
     result = data.frame()
-    for (n.pc in 2:nrow(predictors)) {
-        for (n.da in 1:nrow(predictors)) {
+    for (n.pc in 2:ncol(predictors)) {
+        n.da = 10
+        for (n.da in 1:ncol(predictors)) {
             x = analyze.dapc(n.pc, n.da)
             cat(paste(n.pc,
                         n.da,
