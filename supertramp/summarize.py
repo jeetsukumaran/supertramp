@@ -7,7 +7,7 @@ import dendropy
 import subprocess
 from dendropy.calculate import treemeasure
 from dendropy.model import birthdeath
-from dendropy.utility import session
+from dendropy.utility import processio
 from supertramp import BitVector
 
 if dendropy.__version__.startswith("4"):
@@ -67,7 +67,7 @@ class Rcalculator(object):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 )
-        stdout, stderr = session.communicate(p, script)
+        stdout, stderr = processio.communicate(p, script)
         if p.returncode != 0:
             print(script)
             for row in stderr.split("\n"):
