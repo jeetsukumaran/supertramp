@@ -907,7 +907,7 @@ class SupertrampSimulator(object):
         lineage.is_extant = False
         if lineage is self.phylogeny.seed_node:
             self.total_extinction_exception("Death cycle (pruning): seed node has been extirpated from all habitats on all islands")
-        self.phylogeny.prune_subtree(node=lineage, update_splits=False, delete_outdegree_one=True)
+        self.phylogeny.prune_subtree(node=lineage)
         if self.phylogeny.seed_node.num_child_nodes() == 0 and not self.phylogeny.seed_node.is_extant:
             self.total_extinction_exception("Death cycle (post-pruning): no extant lineages on tree")
         if self.debug_mode:
