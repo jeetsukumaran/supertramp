@@ -7,13 +7,39 @@ SIM.PARAMS <- c(
                "dispersal.rate",
                "niche.evolution.prob"
                )
+EXPERIMENTAL.TO.DROP <- c(
+        # "community.by.habitat.normalized.unweighted.mntd.obs.p.H0",
+        # "community.by.habitat.normalized.unweighted.mntd.obs.p.H1",
+        # "community.by.habitat.normalized.unweighted.mntd.obs.p.mean",
+        # "community.by.habitat.normalized.unweighted.mntd.obs.p.var",
+        # "community.by.habitat.normalized.unweighted.mpd.obs.p.H0",
+        # "community.by.habitat.normalized.unweighted.mpd.obs.p.H1",
+        # "community.by.habitat.normalized.unweighted.mpd.obs.p.mean",
+        # "community.by.habitat.normalized.unweighted.mpd.obs.p.var",
+        # "community.by.habitat.normalized.weighted.mntd.obs.p.H0",
+        # "community.by.habitat.normalized.weighted.mntd.obs.p.H1",
+        # "community.by.habitat.normalized.weighted.mntd.obs.p.mean",
+        # "community.by.habitat.normalized.weighted.mntd.obs.p.var",
+        # "community.by.habitat.normalized.weighted.mpd.obs.p.H0",
+        # "community.by.habitat.normalized.weighted.mpd.obs.p.H1",
+        # "community.by.habitat.normalized.weighted.mpd.obs.p.mean",
+        # "community.by.habitat.normalized.weighted.mpd.obs.p.var",
+        # "community.by.island.normalized.unweighted.mntd.obs.p.mean",
+        # "community.by.island.normalized.unweighted.mntd.obs.p.var",
+        # "community.by.island.normalized.unweighted.mpd.obs.p.mean",
+        # "community.by.island.normalized.unweighted.mpd.obs.p.var",
+        # "community.by.island.normalized.weighted.mntd.obs.p.mean",
+        # "community.by.island.normalized.weighted.mntd.obs.p.var",
+        # "community.by.island.normalized.weighted.mpd.obs.p.mean",
+        # "community.by.island.normalized.weighted.mpd.obs.p.var"
+)
 RESULT.METADATA <- c(
                     "edges",
                     "est.birth.rate",
                     "length",
                     "size"
                     )
-COLS.TO.DROP <- c(SIM.PARAMS, RESULT.METADATA)
+COLS.TO.DROP <- c(SIM.PARAMS, RESULT.METADATA, EXPERIMENTAL.TO.DROP)
 
 summary.df <- read.table("processed/summary.txt", header<-T)
 # summary.b1 = summary.df[summary.df$birth.rate==0.03,]
