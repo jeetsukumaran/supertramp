@@ -38,11 +38,17 @@ def main():
             "-o", "--output-root-dir",
             default='processed',
             help="Output directory root (default: '%(default)s').")
+    parser.add_argument(
+            "-x", "--exclude-first-island-as-continental-source-outside-of-analysis",
+            action="store_true",
+            default=False,
+            help="Treat Island 0 as a continental source, and exclude it from analysis.")
     args = parser.parse_args()
     args.quiet = False
     args.group_processed_trees_by_model = False
 
     tree_processor = summarize.TreeProcessor()
+    tree_processor.exclude_first_island_as_continental_source_outside_of_analysis = args.exclude_first_island_as_continental_source_outside_of_analysis
     param_keys = collections.OrderedDict()
     param_keys["dispersal.model"]      = "dispersal_model"
     param_keys["birth.rate"]           = "birth_rate"

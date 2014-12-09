@@ -243,7 +243,7 @@ class TreeProcessor(object):
         self.drop_stunted_trees = True
         self.drop_trees_not_occupying_all_islands = True
         self.drop_trees_not_occupying_all_habitats = True
-        self.exclude_first_island_as_continental_source_outside_of_analysis = True
+        self.exclude_first_island_as_continental_source_outside_of_analysis = False
         self.rcalc = Rcalculator()
 
     def purge_taxa(self, trees, taxa_to_exclude):
