@@ -10,10 +10,8 @@ from dendropy.model import birthdeath
 from dendropy.utility import processio
 from supertramp import BitVector
 
-if dendropy.__version__.startswith("4"):
-    _get_taxa = lambda x: x.taxon_namespace
-else:
-    _get_taxa = lambda x: x.taxon_set
+class OutOfRegionError(Exception):
+    pass
 
 class ColorAssigner(object):
 
@@ -46,6 +44,8 @@ class ColorAssigner(object):
                     on_bits.append(idx)
             if len(on_bits) > 1:
                 self.assigned_colors[code] = "#666666"
+            elif len(on_bits) == 0:
+                raise OutOfRegionError
             else:
                 self.assigned_colors[code] = self.COLORS[on_bits[0]+self.offset]
             return self.assigned_colors[code]
@@ -238,26 +238,21 @@ class TreeProcessor(object):
 
     def __init__(self):
 
-        # self.island_colors = collections.defaultdict(lambda: "#666666")
-        # self.island_colors.update({
-        #         "000001" : "#ff0000",
-        #         "000010" : "#00cc00",
-        #         "000100" : "#0000ff",
-        #         "001000" : "#cccc00",
-        #         "010000" : "#cccc00",
-        #         "100000" : "#cccc00",
-        #         })
-        # self.habitat_colors = {}
-        # self.habitat_colors.update({
-        #         "01" : "#ff00ff",
-        #         "10" : "#00ffff",
-        #         })
         self.island_colors = ColorAssigner()
         self.habitat_colors = ColorAssigner()
         self.drop_stunted_trees = True
         self.drop_trees_not_occupying_all_islands = True
         self.drop_trees_not_occupying_all_habitats = True
+        self.exclude_first_island_as_continental_source_outside_of_analysis = True
         self.rcalc = Rcalculator()
+
+    def purge_taxa(self, trees, taxa_to_exclude):
+        if not taxa_to_exclude:
+            return
+        for tree in trees:
+            tree.prune_taxa(taxa_to_exclude)
+        for taxon in taxa_to_exclude:
+            trees.taxon_namespace.remove_taxon(taxon)
 
     def write_colorized_trees(self, outf, trees, scheme):
         if scheme == "by-island":
@@ -268,16 +263,10 @@ class TreeProcessor(object):
             branch_color_attr = "island_color"
         else:
             raise ValueError("Unrecognized scheme: {}".format(scheem))
-        taxa = _get_taxa(trees)
-        self.encode_taxa(taxa)
-        for taxon in taxa:
+        taxa_to_exclude = self.encode_taxa(trees.taxon_namespace)
+        self.purge_taxa(trees, taxa_to_exclude)
+        for taxon in trees.taxon_namespace:
             taxon.annotations["!color"] = getattr(taxon, taxon_color_attr)
-        # for tree in trees:
-        #     for nd in tree:
-        #         if nd.label is None:
-        #             continue
-        #         self.encode_labeled_item(nd)
-        #         nd.annotations["!color"] = getattr(nd, branch_color_attr)
         trees.write_to_stream(outf, "nexus")
 
     def get_mean_patristic_distance(self, pdm, nodes):
@@ -300,7 +289,8 @@ class TreeProcessor(object):
             trees_outf=None,
             params=None,
             summaries=None):
-        self.encode_taxa(_get_taxa(trees))
+        taxa_to_exclude = self.encode_taxa(trees.taxon_namespace)
+        self.purge_taxa(trees, taxa_to_exclude)
         stats_fields = set()
 
         # crucial assumption here is all trees from same landscape wrt to
@@ -419,18 +409,32 @@ class TreeProcessor(object):
     def encode_labeled_item(self, t):
         if hasattr(t, "is_encoded") and t.is_encoded:
             return
+        if self.exclude_first_island_as_continental_source_outside_of_analysis:
+            p = t.label.split(".")
+            t.label = ".".join([p[0], p[1][1:], p[2]])
         label_parts = t.label.split(".")
         t.island_code = label_parts[1]
-        t.island_color = self.island_colors[t.island_code]
-        t.habitat_code = label_parts[2]
-        t.habitat_color = self.habitat_colors[t.habitat_code]
-        t.is_encoded = True
+        # if self.exclude_first_island_as_continental_source_outside_of_analysis:
+        #     t.island_code = t.island_code[1:]
+        try:
+            t.island_color = self.island_colors[t.island_code]
+            t.habitat_code = label_parts[2]
+            t.habitat_color = self.habitat_colors[t.habitat_code]
+            t.is_encoded = True
+            t.out_of_region = False
+        except OutOfRegionError:
+            # taxon only occurs on first island, and needs to be removed
+            t.out_of_region = True
 
     def encode_taxa(self, taxa):
         if hasattr(taxa, "is_encoded") and taxa.is_encoded:
-            return
+            return []
+        taxa_to_exclude = []
         for t in taxa:
             self.encode_labeled_item(t)
+            if t.out_of_region:
+                taxa_to_exclude.append(t)
         taxa.is_encoded = True
+        return taxa_to_exclude
 
 
