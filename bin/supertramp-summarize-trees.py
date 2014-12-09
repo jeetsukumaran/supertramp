@@ -25,6 +25,12 @@ def main():
             action="store_true",
             default=False,
             help="Treat Island 0 as a continental source, and exclude it from analysis.")
+    parser.add_argument("-f", "--format",
+            dest="schema",
+            type=str,
+            default="nexus",
+            choices=["nexus", "newick"],
+            help="input data format (default='%(default)s')")
     args = parser.parse_args()
     args.quiet = False
     args.group_processed_trees_by_model = False
@@ -42,7 +48,7 @@ def main():
             if not args.quiet:
                 sys.stderr.write("Processing file {} of {}: {}\n".format(source_idx+1, len(args.source_paths), source_path))
             params = {}
-            trees = dendropy.TreeList.get_from_path(source_path, "newick")
+            trees = dendropy.TreeList.get_from_path(source_path, args.schema)
             for tree in trees:
                 tree.treefile = source_path
                 summary_stat, sub_stats_fields = tree_processor.process_trees(
@@ -52,8 +58,11 @@ def main():
                 stats_fields.update(sub_stats_fields)
                 for color_scheme in ("by-island", "by-habitat"):
                     colorized_trees_filepath = os.path.join(output_dir,
-                            "processed.{}.trees".format(
-                            color_scheme))
+                            "{}.{}.processed.{}.trees".format(
+                            source_idx,
+                            os.path.basename(source_path),
+                            color_scheme,
+                            ))
                     with open(colorized_trees_filepath, "w") as trees_outf:
                         tree_processor.write_colorized_trees(trees_outf, trees, color_scheme)
     except KeyboardInterrupt:
