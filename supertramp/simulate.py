@@ -260,6 +260,14 @@ class Lineage(dendropy.Node):
         # this habitat type!!!
         # self.habitat_types[habitat.habitat_type.index] = 0
 
+    def occurs_outside_of_first_island(self):
+        # print("{}: {}: {}".format(
+        #     self.island_habitat_localities,
+        #     self.island_habitat_localities[1:],
+        #     any(self.island_habitat_localities[1:]),
+        #     ))
+        return any(self.island_habitat_localities[1:])
+
     def iterate_habitats(self):
         for idx, habitat_presence in enumerate(self.habitats):
             if habitat_presence == 1:
@@ -286,7 +294,7 @@ class Lineage(dendropy.Node):
             return self.final_distribution_label
         return "{}.{}".format(self.island_habitat_localities, self.habitat_types)
 
-    def add_age_to_extant_tips(self, ngens=1):
+    def add_age_to_extant_tips(self, ngens=1, exclude_first_island_from_tip_count=None):
         """
         Grows tree by adding ``ngens`` time unit(s) to all tips.
         Returns number of extant tips.
@@ -295,10 +303,12 @@ class Lineage(dendropy.Node):
         if self._child_nodes:
             for nd in self.leaf_iter():
                 if nd.is_extant:
-                    num_extant_tips += 1
+                    if (not exclude_first_island_from_tip_count or nd.occurs_outside_of_first_island()):
+                        num_extant_tips += 1
                     nd.edge.length += ngens
         elif self.is_extant:
-            num_extant_tips += 1
+            if (not exclude_first_island_from_tip_count or self.occurs_outside_of_first_island()):
+                num_extant_tips += 1
             self.edge.length += ngens
         return num_extant_tips
 
@@ -346,11 +356,11 @@ class Phylogeny(dendropy.Tree):
         return Lineage(**kwargs)
     node_factory = classmethod(node_factory)
 
-    def add_age_to_extant_tips(self, ngens=1):
+    def add_age_to_extant_tips(self, ngens=1, exclude_first_island_from_tip_count=None):
         """
         Grows tree by adding ``ngens`` time unit(s) to all tips.
         """
-        return self.seed_node.add_age_to_extant_tips(ngens)
+        return self.seed_node.add_age_to_extant_tips(ngens, exclude_first_island_from_tip_count=exclude_first_island_from_tip_count)
 
 class TotalExtinctionException(Exception):
     def __init__(self, *args, **kwargs):
@@ -680,7 +690,7 @@ class SupertrampSimulator(object):
     def num_habitat_types(self):
         return len(self.habitat_types)
 
-    def run(self, ngens=None, ntips=None):
+    def run(self, ngens=None, ntips=None, exclude_first_island_from_tip_count=None):
         info = ["Running from generation {} ".format(self.current_gen+1)]
         if ntips is not None and ngens is not None:
             info.append(" to generation {stop} ({ngens} generations) or until {ntax} extant tips observed".format(
@@ -696,12 +706,15 @@ class SupertrampSimulator(object):
                 ngens=ngens))
         else:
             info.append(" with no termination condition specified")
+        if exclude_first_island_from_tip_count:
+            info.append(" (note: only tips with ranges including islands apart from island 0 will be counted for the termination condition)")
         info = "".join(info)
         self.run_logger.info(info)
         self.run_logger.system = self
         cur_gen = 0
         while True:
-            self.execute_life_cycle(num_extant_tips_exception_trigger=ntips)
+            self.execute_life_cycle(num_extant_tips_exception_trigger=ntips,
+                    exclude_first_island_from_tip_count=exclude_first_island_from_tip_count)
             cur_gen += 1
             if ngens and cur_gen > ngens:
                 break
@@ -713,9 +726,10 @@ class SupertrampSimulator(object):
         raise TotalExtinctionException(msg)
 
     def execute_life_cycle(self,
-            num_extant_tips_exception_trigger=None):
+            num_extant_tips_exception_trigger=None,
+            exclude_first_island_from_tip_count=None):
         self.current_gen += 1
-        num_extant_tips = self.phylogeny.add_age_to_extant_tips(1)
+        num_extant_tips = self.phylogeny.add_age_to_extant_tips(1, exclude_first_island_from_tip_count=exclude_first_island_from_tip_count)
         if num_extant_tips_exception_trigger is not None and num_extant_tips >= num_extant_tips_exception_trigger:
             self.run_logger.info("Number of extant tips = {}".format(num_extant_tips_exception_trigger))
             raise TargetNumberOfTipsException(num_extant_tips_exception_trigger, num_extant_tips)
@@ -1032,6 +1046,7 @@ def repeat_run_supertramp(
         model_params_d,
         ngens,
         target_num_tips,
+        exclude_first_island_from_tip_count,
         nreps,
         output_prefix,
         random_seed="None",
@@ -1051,10 +1066,14 @@ def repeat_run_supertramp(
         Maximum number of generations for which to run each individual
         replicate. If `None`, will run indefinitely unless some other
         termination condition (e.g. `target_num-tips`) is set.
-    target_num_tips:
+    target_num_tips: integer
         Terminate the simulation if this number of extant tips is observed on
         the tree. If `None`, will run indefinitely unless some other
         termination condition (e.g. `ngens`) is set.
+    exclude_first_island_from_tip_count
+        When counting tips for termination condition, do not count any tips
+        that are only found in the first 'island' (i.e., treat is as a
+        'continental' source with potentially unlimited taxa).
     nreps : integer
         Number of replicates to produce. f
     output_prefix : string
@@ -1108,7 +1127,10 @@ def repeat_run_supertramp(
                     name=simulation_name,
                     **configd)
             try:
-                success = supertramp_simulator.run(ngens=ngens, ntips=target_num_tips)
+                success = supertramp_simulator.run(
+                        ngens=ngens,
+                        ntips=target_num_tips,
+                        exclude_first_island_from_tip_count=exclude_first_island_from_tip_count)
             except TotalExtinctionException as e:
                 run_logger.info("||SUPERTRAMP-META|| Run {} of {}: [t={}] total extinction of all lineages before termination condition: {}".format(rep+1, nreps, supertramp_simulator.current_gen, e))
                 run_logger.info("||SUPERTRAMP-META|| Run {} of {}: restarting".format(rep+1, nreps))

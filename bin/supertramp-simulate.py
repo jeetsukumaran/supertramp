@@ -92,6 +92,10 @@ def main():
             type=int,
             default=50,
             help="Number of tips to generate (default= %(default)s).")
+    termination_condition_options.add_argument("-x", "--exclude-first-island-from-tip-count",
+            action="store_true",
+            default=False,
+            help="When counting tips for termination condition, do not count any tips that are only found in the first 'island' (i.e., treat is as a 'continental' source with potentially unlimited taxa)")
     termination_condition_options.add_argument("-g", "--ngens",
             type=int,
             default=10000,
@@ -106,6 +110,7 @@ def main():
     target_num_tips = argsd.pop("target_num_tips")
     if target_num_tips <= 0:
         target_num_tips = None
+    exclude_first_island_from_tip_count = argsd.pop("exclude_first_island_from_tip_count")
     if ngens is None:
         default_log_frequency = 1000
     else:
@@ -123,6 +128,7 @@ def main():
             model_params_d=argsd,
             ngens=ngens,
             target_num_tips=target_num_tips,
+            exclude_first_island_from_tip_count=exclude_first_island_from_tip_count,
             nreps=nreps,
             output_prefix=output_prefix,
             random_seed=random_seed,
