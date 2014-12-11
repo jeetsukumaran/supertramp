@@ -249,10 +249,17 @@ class TreeProcessor(object):
     def purge_taxa(self, trees, taxa_to_exclude):
         if not taxa_to_exclude:
             return
+        to_keep = dendropy.TreeList(taxon_namespace=trees.taxon_namespace)
         for tree in trees:
-            tree.prune_taxa(taxa_to_exclude)
+            try:
+                tree.prune_taxa(taxa_to_exclude)
+                to_keep.append(tree)
+            except AttributeError:
+                # trying to prune root node
+                pass
         for taxon in taxa_to_exclude:
             trees.taxon_namespace.remove_taxon(taxon)
+        return to_keep
 
     def write_colorized_trees(self, outf, trees, scheme):
         if scheme == "by-island":
@@ -264,7 +271,7 @@ class TreeProcessor(object):
         else:
             raise ValueError("Unrecognized scheme: {}".format(scheem))
         taxa_to_exclude = self.encode_taxa(trees.taxon_namespace)
-        self.purge_taxa(trees, taxa_to_exclude)
+        trees = self.purge_taxa(trees, taxa_to_exclude)
         for taxon in trees.taxon_namespace:
             taxon.annotations["!color"] = getattr(taxon, taxon_color_attr)
         trees.write_to_stream(outf, "nexus")
@@ -290,7 +297,7 @@ class TreeProcessor(object):
             params=None,
             summaries=None):
         taxa_to_exclude = self.encode_taxa(trees.taxon_namespace)
-        self.purge_taxa(trees, taxa_to_exclude)
+        trees = self.purge_taxa(trees, taxa_to_exclude)
         stats_fields = set()
 
         # crucial assumption here is all trees from same landscape wrt to
