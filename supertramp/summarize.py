@@ -248,7 +248,7 @@ class TreeProcessor(object):
 
     def purge_taxa(self, trees, taxa_to_exclude):
         if not taxa_to_exclude:
-            return
+            return trees
         to_keep = dendropy.TreeList(taxon_namespace=trees.taxon_namespace)
         for tree in trees:
             try:
