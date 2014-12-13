@@ -47,8 +47,12 @@ def main():
     args.quiet = False
     args.group_processed_trees_by_model = False
 
-    tree_processor = summarize.TreeProcessor()
-    tree_processor.exclude_first_island_as_continental_source_outside_of_analysis = args.exclude_first_island_as_continental_source_outside_of_analysis
+    tree_summarizer = summarize.TreeSummarizer(
+        drop_stunted_trees=True,
+        drop_trees_not_occupying_all_islands=True,
+        drop_trees_not_occupying_all_habitats=True,
+        exclude_first_island_as_continental_source_outside_of_analysis=args.exclude_first_island_as_continental_source_outside_of_analysis,
+    )
     param_keys = collections.OrderedDict()
     param_keys["dispersal.model"]      = "dispersal_model"
     param_keys["birth.rate"]           = "birth_rate"
@@ -87,12 +91,12 @@ def main():
                         "newick")
                 for tree in trees:
                     tree.treefile = tree_filepath
-                summary_stat, sub_stats_fields = tree_processor.process_trees(
+                trees, sub_stats_fields = tree_summarizer.summarize_trees(
                         trees,
                         params=params,
                         summaries=summaries)
                 stats_fields.update(sub_stats_fields)
-                for color_scheme in ("by-island", "by-habitat"):
+                for color_schema in ("by-island", "by-habitat"):
                     if args.group_processed_trees_by_model:
                         out_fname = job
                     else:
@@ -100,9 +104,13 @@ def main():
                         assert len(parts) == 2
                         model_name = parts[-1]
                         out_fname = parts[0]
-                    colorized_trees_filepath = os.path.join(output_dir, "{}.processed.{}.{}.trees".format(out_fname, color_scheme, model_name))
+                    colorized_trees_filepath = os.path.join(output_dir, "{}.processed.{}.{}.trees".format(out_fname, color_schema, model_name))
                     with open(colorized_trees_filepath, "w") as trees_outf:
-                        tree_processor.write_colorized_trees(trees_outf, trees, color_scheme)
+                        tree_summarizer.write_colorized_trees(
+                                trees_outf,
+                                trees,
+                                color_schema,
+                                is_trees_postprocessed=True)
     except KeyboardInterrupt:
         pass
 

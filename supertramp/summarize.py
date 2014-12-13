@@ -9,46 +9,7 @@ from dendropy.calculate import treemeasure
 from dendropy.model import birthdeath
 from dendropy.utility import processio
 from supertramp import BitVector
-
-class OutOfRegionError(Exception):
-    pass
-
-class ColorAssigner(object):
-
-    COLORS = (
-        "#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff", "#000000",
-        "#800000", "#008000", "#000080", "#808000", "#800080", "#008080", "#808080",
-        "#c00000", "#00c000", "#0000c0", "#c0c000", "#c000c0", "#00c0c0", "#c0c0c0",
-        "#400000", "#004000", "#000040", "#404000", "#400040", "#004040", "#404040",
-        "#200000", "#002000", "#000020", "#202000", "#200020", "#002020", "#202020",
-        "#600000", "#006000", "#000060", "#606000", "#600060", "#006060", "#606060",
-        "#a00000", "#00a000", "#0000a0", "#a0a000", "#a000a0", "#00a0a0", "#a0a0a0",
-        "#e00000", "#00e000", "#0000e0", "#e0e000", "#e000e0", "#00e0e0", "#e0e0e0",
-        "#666666",
-        )
-    COLOR_INDEXES = {}
-    for idx, c in enumerate(COLORS):
-        COLOR_INDEXES[c] = idx
-
-    def __init__(self, offset=0):
-        self.assigned_colors = {}
-        self.offset = offset
-
-    def __getitem__(self, code):
-        try:
-            return self.assigned_colors[code]
-        except KeyError:
-            on_bits = []
-            for idx, i in enumerate(code):
-                if i == "1":
-                    on_bits.append(idx)
-            if len(on_bits) > 1:
-                self.assigned_colors[code] = "#666666"
-            elif len(on_bits) == 0:
-                raise OutOfRegionError
-            else:
-                self.assigned_colors[code] = self.COLORS[on_bits[0]+self.offset]
-            return self.assigned_colors[code]
+from supertramp import postprocess
 
 class Rcalculator(object):
 
@@ -234,47 +195,21 @@ class Rcalculator(object):
         tree.stats.update(results)
         return results
 
-class TreeProcessor(object):
+class TreeSummarizer(object):
 
-    def __init__(self):
-
-        self.island_colors = ColorAssigner()
-        self.habitat_colors = ColorAssigner()
-        self.drop_stunted_trees = True
-        self.drop_trees_not_occupying_all_islands = True
-        self.drop_trees_not_occupying_all_habitats = True
-        self.exclude_first_island_as_continental_source_outside_of_analysis = False
+    def __init__(self,
+            drop_stunted_trees,
+            drop_trees_not_occupying_all_habitats,
+            drop_trees_not_occupying_all_islands,
+            exclude_first_island_as_continental_source_outside_of_analysis,
+            ):
+        self.tree_postprocessor = postprocess.TreePostProcessor(
+                drop_stunted_trees=drop_stunted_trees,
+                exclude_first_island_as_continental_source_outside_of_analysis=exclude_first_island_as_continental_source_outside_of_analysis,
+                )
+        self.drop_trees_not_occupying_all_islands = drop_trees_not_occupying_all_islands
+        self.drop_trees_not_occupying_all_habitats = drop_trees_not_occupying_all_habitats
         self.rcalc = Rcalculator()
-
-    def purge_taxa(self, trees, taxa_to_exclude):
-        if not taxa_to_exclude:
-            return trees
-        to_keep = dendropy.TreeList(taxon_namespace=trees.taxon_namespace)
-        for tree in trees:
-            try:
-                tree.prune_taxa(taxa_to_exclude)
-                to_keep.append(tree)
-            except AttributeError:
-                # trying to prune root node
-                pass
-        for taxon in taxa_to_exclude:
-            trees.taxon_namespace.remove_taxon(taxon)
-        return to_keep
-
-    def write_colorized_trees(self, outf, trees, scheme):
-        if scheme == "by-island":
-            taxon_color_attr = "island_color"
-            branch_color_attr = "habitat_color"
-        elif scheme == "by-habitat":
-            taxon_color_attr = "habitat_color"
-            branch_color_attr = "island_color"
-        else:
-            raise ValueError("Unrecognized scheme: {}".format(scheem))
-        taxa_to_exclude = self.encode_taxa(trees.taxon_namespace)
-        trees = self.purge_taxa(trees, taxa_to_exclude)
-        for taxon in trees.taxon_namespace:
-            taxon.annotations["!color"] = getattr(taxon, taxon_color_attr)
-        trees.write_to_stream(outf, "nexus")
 
     def get_mean_patristic_distance(self, pdm, nodes):
         if len(nodes) <= 1:
@@ -291,13 +226,12 @@ class TreeProcessor(object):
                 ncomps += 1
         return weighted_dist/ncomps, unweighted_dist/ncomps
 
-    def process_trees(self,
+    def summarize_trees(self,
             trees,
             trees_outf=None,
             params=None,
             summaries=None):
-        taxa_to_exclude = self.encode_taxa(trees.taxon_namespace)
-        trees = self.purge_taxa(trees, taxa_to_exclude)
+        trees = self.tree_postprocessor.process_trees(trees)
         stats_fields = set()
 
         # crucial assumption here is all trees from same landscape wrt to
@@ -316,9 +250,6 @@ class TreeProcessor(object):
         # community_by_disturbed_vs_interior_habitat[1] = {}
 
         for tree in list(trees):
-            if self.drop_stunted_trees and tree.seed_node.num_child_nodes() <= 1:
-                trees.remove(tree)
-                continue
             num_tips = 0
             total_length = 0.0
             total_edges = 0
@@ -333,7 +264,7 @@ class TreeProcessor(object):
                 if nd.taxon is None and nd.label is None:
                     continue
                 if nd.label is not None:
-                    self.encode_labeled_item(nd)
+                    self.tree_postprocessor.decode_labeled_item_biogeography(nd)
                 # stats
                 total_edges += 1
                 num_tips += 1
@@ -413,35 +344,5 @@ class TreeProcessor(object):
                 self.write_nexus(trees, trees_outf)
         return trees, stats_fields
 
-    def encode_labeled_item(self, t):
-        if hasattr(t, "is_encoded") and t.is_encoded:
-            return
-        if self.exclude_first_island_as_continental_source_outside_of_analysis:
-            p = t.label.split(".")
-            t.label = ".".join([p[0], p[1][1:], p[2]])
-        label_parts = t.label.split(".")
-        t.island_code = label_parts[1]
-        # if self.exclude_first_island_as_continental_source_outside_of_analysis:
-        #     t.island_code = t.island_code[1:]
-        try:
-            t.island_color = self.island_colors[t.island_code]
-            t.habitat_code = label_parts[2]
-            t.habitat_color = self.habitat_colors[t.habitat_code]
-            t.is_encoded = True
-            t.out_of_region = False
-        except OutOfRegionError:
-            # taxon only occurs on first island, and needs to be removed
-            t.out_of_region = True
-
-    def encode_taxa(self, taxa):
-        if hasattr(taxa, "is_encoded") and taxa.is_encoded:
-            return []
-        taxa_to_exclude = []
-        for t in taxa:
-            self.encode_labeled_item(t)
-            if t.out_of_region:
-                taxa_to_exclude.append(t)
-        taxa.is_encoded = True
-        return taxa_to_exclude
-
-
+    def write_colorized_trees(self, outf, trees, schema, is_trees_postprocessed):
+        self.tree_postprocessor.write_colorized_trees(outf, trees, schema, is_trees_postprocessed)

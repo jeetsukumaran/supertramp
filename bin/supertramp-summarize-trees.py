@@ -35,8 +35,12 @@ def main():
     args.quiet = False
     args.group_processed_trees_by_model = False
 
-    tree_processor = summarize.TreeProcessor()
-    tree_processor.exclude_first_island_as_continental_source_outside_of_analysis = args.exclude_first_island_as_continental_source_outside_of_analysis
+    tree_summarizer = summarize.TreeSummarizer(
+        drop_stunted_trees=True,
+        drop_trees_not_occupying_all_islands=True,
+        drop_trees_not_occupying_all_habitats=True,
+        exclude_first_island_as_continental_source_outside_of_analysis=args.exclude_first_island_as_continental_source_outside_of_analysis,
+    )
     summaries = []
     stats_fields = set()
     output_root_dir = args.output_root_dir
@@ -51,20 +55,24 @@ def main():
             trees = dendropy.TreeList.get_from_path(source_path, args.schema)
             for tree in trees:
                 tree.treefile = source_path
-                summary_stat, sub_stats_fields = tree_processor.process_trees(
-                        trees,
-                        params=params,
-                        summaries=summaries)
-                stats_fields.update(sub_stats_fields)
-                for color_scheme in ("by-island", "by-habitat"):
-                    colorized_trees_filepath = os.path.join(output_dir,
-                            "{}.{}.processed.{}.trees".format(
-                            source_idx,
-                            os.path.basename(source_path),
-                            color_scheme,
-                            ))
-                    with open(colorized_trees_filepath, "w") as trees_outf:
-                        tree_processor.write_colorized_trees(trees_outf, trees, color_scheme)
+            trees, sub_stats_fields = tree_summarizer.summarize_trees(
+                    trees,
+                    params=params,
+                    summaries=summaries)
+            stats_fields.update(sub_stats_fields)
+            for color_schema in ("by-island", "by-habitat"):
+                colorized_trees_filepath = os.path.join(output_dir,
+                        "{}.{}.processed.{}.trees".format(
+                        source_idx,
+                        os.path.basename(source_path),
+                        color_schema,
+                        ))
+                with open(colorized_trees_filepath, "w") as trees_outf:
+                    tree_summarizer.write_colorized_trees(
+                            trees_outf,
+                            trees,
+                            color_schema,
+                            is_trees_postprocessed=True)
     except KeyboardInterrupt:
         pass
 
