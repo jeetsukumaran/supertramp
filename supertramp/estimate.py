@@ -138,7 +138,7 @@ class TraitEvolutionRateEstimator(object):
                     name_to_symbol_map.SYMBOLS[0],
                     name_to_symbol_map.SYMBOLS[1]))
             bt_commands.append("run")
-            bt_commands = "\n".join(bt_commands)
+            # bt_commands = "\n".join(bt_commands)
             p = subprocess.Popen(
                     ["BayesTraits", self.tree_file_name, self.data_file_name],
                     stdout=subprocess.PIPE,
