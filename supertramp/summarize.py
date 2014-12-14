@@ -198,14 +198,14 @@ class Rcalculator(object):
 class TreeSummarizer(object):
 
     def __init__(self,
-            drop_stunted_trees,
+            exclude_first_island_as_continental_source_outside_of_analysis,
             drop_trees_not_occupying_all_habitats,
             drop_trees_not_occupying_all_islands,
-            exclude_first_island_as_continental_source_outside_of_analysis,
+            drop_stunted_trees,
             ):
         self.tree_postprocessor = postprocess.TreePostProcessor(
-                drop_stunted_trees=drop_stunted_trees,
                 exclude_first_island_as_continental_source_outside_of_analysis=exclude_first_island_as_continental_source_outside_of_analysis,
+                drop_stunted_trees=drop_stunted_trees,
                 )
         self.drop_trees_not_occupying_all_islands = drop_trees_not_occupying_all_islands
         self.drop_trees_not_occupying_all_habitats = drop_trees_not_occupying_all_habitats

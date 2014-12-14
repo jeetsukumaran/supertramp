@@ -47,11 +47,37 @@ class ColorAssigner(object):
                 self.assigned_colors[code] = self.COLORS[on_bits[0]+self.offset]
             return self.assigned_colors[code]
 
+class NameToSymbolMap(object):
+
+    SYMBOLS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    SYMBOL_INDEXES = {}
+    for idx, s in enumerate(SYMBOLS):
+        SYMBOL_INDEXES[s] = idx
+
+    def __init__(self):
+        self.assigned_symbols = {}
+
+    def __getitem__(self, name):
+        try:
+            return self.assigned_symbols[name]
+        except KeyError:
+            sidx = len(self.assigned_symbols)
+            assert sidx < len(NameToSymbolMap.SYMBOLS)
+            self.assigned_symbols[name] = NameToSymbolMap.SYMBOLS[sidx]
+            return self.assigned_symbols[name]
+
+    def __iter__(self):
+        for idx in range(len(self.assigned_symbols)):
+            return NameToSymbolMap.SYMBOLS[idx]
+
+    def __len__(self):
+        return len(self.assigned_symbols)
+
 class TreePostProcessor(object):
 
     def __init__(self,
-            drop_stunted_trees,
             exclude_first_island_as_continental_source_outside_of_analysis,
+            drop_stunted_trees,
             ):
         self.island_colors = ColorAssigner()
         self.habitat_colors = ColorAssigner()

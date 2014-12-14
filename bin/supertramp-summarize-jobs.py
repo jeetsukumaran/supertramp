@@ -48,10 +48,10 @@ def main():
     args.group_processed_trees_by_model = False
 
     tree_summarizer = summarize.TreeSummarizer(
-        drop_stunted_trees=True,
+        exclude_first_island_as_continental_source_outside_of_analysis=args.exclude_first_island_as_continental_source_outside_of_analysis,
         drop_trees_not_occupying_all_islands=True,
         drop_trees_not_occupying_all_habitats=True,
-        exclude_first_island_as_continental_source_outside_of_analysis=args.exclude_first_island_as_continental_source_outside_of_analysis,
+        drop_stunted_trees=True,
     )
     param_keys = collections.OrderedDict()
     param_keys["dispersal.model"]      = "dispersal_model"
